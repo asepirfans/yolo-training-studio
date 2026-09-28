@@ -1,0 +1,1439 @@
+{% extends "base.html" %}
+
+{% block title %}Augmentasi Dataset | YOLO Training Studio{% endblock %}
+{% block header_title %}Augmentasi Dataset{% endblock %}
+
+{% block content %}
+<style>
+  html, body {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .app-shell {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .main-wrapper {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .page-body {
+    height: calc(100vh - 48px) !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0.85rem 1.5rem 0.5rem !important;
+    box-sizing: border-box !important;
+  }
+  .aug-header {
+    flex-shrink: 0 !important;
+    margin-bottom: 0.85rem !important;
+  }
+  .aug-grid {
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: 460px 1fr !important;
+    gap: 1.25rem !important;
+    align-items: stretch !important;
+    overflow: hidden !important;
+  }
+  @media (max-width: 1200px) {
+    .aug-grid {
+      grid-template-columns: 1fr !important;
+      overflow-y: auto !important;
+    }
+  }
+  .aug-left-col {
+    height: 100% !important;
+    overflow-y: auto !important;
+    padding-right: 8px !important;
+    padding-bottom: 2rem !important;
+  }
+  .aug-left-col::-webkit-scrollbar {
+    width: 6px;
+  }
+  .aug-left-col::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+  }
+  .aug-left-col::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+  }
+  .aug-left-col::-webkit-scrollbar-thumb:hover {
+    background: rgba(56, 189, 248, 0.35);
+  }
+  .aug-right-col {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    padding-right: 2px !important;
+    padding-bottom: 0.25rem !important;
+    gap: 0.65rem !important;
+    box-sizing: border-box !important;
+  }
+  .param-group {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.75rem;
+    transition: border-color 0.2s;
+  }
+  .param-group:hover {
+    border-color: rgba(56, 189, 248, 0.3);
+  }
+  .param-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+  .param-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .param-content {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+  }
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #27272a;
+    transition: .3s;
+    border-radius: 20px;
+    border: 1px solid #3f3f46;
+  }
+  .toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+  }
+  input:checked + .toggle-slider {
+    background-color: #0284c7;
+    border-color: #38bdf8;
+  }
+  input:checked + .toggle-slider:before {
+    transform: translateX(16px);
+  }
+  .preset-pill {
+    padding: 5px 12px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    border-radius: 20px;
+    cursor: pointer;
+    border: 1px solid var(--border-subtle);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    transition: all 0.2s;
+  }
+  .preset-pill:hover {
+    background: rgba(56, 189, 248, 0.1);
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.4);
+  }
+  .preview-main-card {
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    margin-bottom: 0 !important;
+    overflow: hidden !important;
+    background: #080c15;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+  }
+  .preview-views-container {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  .preview-view-split {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+  .preview-view-grid {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+  .preview-card {
+    background: #050811;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+  .preview-card:hover {
+    border-color: rgba(56, 189, 248, 0.4);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+  .preview-card-header {
+    flex-shrink: 0;
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.74rem;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    box-sizing: border-box;
+  }
+  .preview-canvas-container {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    background: #02050c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 4px;
+    box-sizing: border-box;
+  }
+  .preview-canvas-container canvas {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
+    border-radius: 4px;
+  }
+  .preview-meta-footer {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.4);
+    border-top: 1px solid var(--border-subtle);
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 28px;
+    box-sizing: border-box;
+  }
+  .preview-meta-footer::-webkit-scrollbar {
+    height: 3px;
+  }
+  .preview-meta-footer::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+  }
+  .aug-param-chip {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    color: #bae6fd;
+    font-size: 0.67rem;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .var-tab {
+    padding: 2px 8px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    border-radius: 3px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .var-tab:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .var-tab.active {
+    background: rgba(52, 211, 153, 0.2);
+    border-color: #34d399;
+    color: #34d399;
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.25);
+  }
+  .btn-mode {
+    padding: 2px 8px;
+    font-size: 0.68rem;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+  .btn-mode:hover {
+    color: #fff;
+  }
+  .btn-mode.active {
+    background: rgba(56, 189, 248, 0.22);
+    color: #38bdf8;
+    font-weight: 600;
+  }
+</style>
+
+<!-- Top Header Section -->
+<div class="aug-header" style="display: flex; justify-content: space-between; align-items: center;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff; margin: 0;">Augmentasi Dataset</h2>
+      <span class="badge badge-primary">Computer Vision Engine</span>
+      {% if active_project %}
+        <span class="badge badge-neutral">{{ active_project.name }}</span>
+      {% endif %}
+    </div>
+    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 3px;">
+      Lipat gandakan variasi gambar dataset Anda dengan kalkulasi otomatis posisi bounding box YOLO yang presisi.
+    </div>
+  </div>
+</div>
+
+<div class="aug-grid">
+
+  <!-- ==============================================================================
+       KOLOM KIRI: Form Pengaturan & Parameter (Scrollable)
+       ============================================================================== -->
+  <div class="aug-left-col">
+
+    <!-- Direct Split Banner (Jika dialihkan langsung dari sesi labeling) -->
+    <div id="split-direct-banner" style="display: none; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; margin-bottom: 0.85rem; font-size: 0.76rem; color: #38bdf8; align-items: center; gap: 8px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      <div>
+        <strong>Langsung dari Labeling Studio:</strong> Dataset ini siap diaugmentasi. Dataset mentah asal otomatis digantikan agar tidak ada dataset ganda di menu <em>Datasets</em>.
+      </div>
+    </div>
+
+    <!-- Card 1: Pilihan Dataset Sumber & Output -->
+    <div class="card" style="margin-bottom: 1rem;">
+      <div class="card-header" style="border-bottom: 1px solid var(--border-subtle);">
+        <div class="card-title">1. Dataset Sumber &amp; Konfigurasi Target</div>
+      </div>
+      <div class="card-body" style="padding: 1rem;">
+        
+        <!-- Dataset Selector -->
+        <div class="form-group" style="margin-bottom: 0.85rem;">
+          <label class="form-label" for="select-source-dataset">Pilih Dataset Asal</label>
+          <select id="select-source-dataset" class="form-select" onchange="onSourceDatasetChange()">
+            {% if datasets %}
+              {% for d in datasets %}
+                <option value="{{ d.id }}" {% if selected_dataset and selected_dataset.id == d.id %}selected{% endif %}
+                        data-train="{{ d.train_count }}" data-val="{{ d.val_count }}" data-test="{{ d.test_count }}" data-name="{{ d.name }}">
+                  {{ d.name }} ({{ d.train_count }} train, {{ d.val_count }} val)
+                </option>
+              {% endfor %}
+            {% else %}
+              <option value="">Belum ada dataset tersedia di project ini</option>
+            {% endif %}
+          </select>
+        </div>
+
+        <!-- Target Subset Selector -->
+        <div class="form-group" style="margin-bottom: 0.85rem;">
+          <label class="form-label" style="display: flex; justify-content: space-between;">
+            <span>Target Subset yang Diaugmentasi</span>
+            <span style="font-size: 0.7rem; color: #38bdf8;">Rekomendasi: Hanya Train</span>
+          </label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+            <label style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #fff;">
+              <input type="radio" name="target-subset" value="train" checked onchange="updateEstimatedOutput()">
+              <span>Hanya Train</span>
+            </label>
+            <label style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #fff;">
+              <input type="radio" name="target-subset" value="train_val" onchange="updateEstimatedOutput()">
+              <span>Train &amp; Val</span>
+            </label>
+            <label style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #fff;">
+              <input type="radio" name="target-subset" value="all" onchange="updateEstimatedOutput()">
+              <span>Semua Subset</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Multiplier & Original Toggle -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="select-multiplier">Faktor Multiplier</label>
+            <select id="select-multiplier" class="form-select" onchange="updateEstimatedOutput()">
+              <option value="1">1x (1 variasi baru / gambar)</option>
+              <option value="2" selected>2x (2 variasi baru / gambar)</option>
+              <option value="3">3x (3 variasi baru / gambar)</option>
+              <option value="4">4x (4 variasi baru / gambar)</option>
+              <option value="5">5x (5 variasi baru / gambar)</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0; display: flex; flex-direction: column; justify-content: flex-end;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.76rem; color: #fff; margin-bottom: 8px;">
+              <input type="checkbox" id="check-include-original" checked onchange="updateEstimatedOutput()">
+              <span>Sertakan Gambar Asli</span>
+            </label>
+            <span style="font-size: 0.68rem; color: var(--text-muted);">Total = Gambar Asli + Variasi Augmentasi</span>
+          </div>
+        </div>
+
+        <!-- Output Dataset Name -->
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+          <label class="form-label" for="input-new-dataset-name">Nama Dataset Hasil Augmentasi</label>
+          <input type="text" id="input-new-dataset-name" class="form-control" placeholder="Nama dataset baru..." style="font-size: 0.82rem;">
+        </div>
+
+        <!-- Replace Source Option (Mencegah Dobel Dataset) -->
+        <div style="background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-sm); padding: 8px 10px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.75rem; color: #fbbf24; margin: 0;">
+            <input type="checkbox" id="check-replace-source" style="accent-color: #f59e0b; margin-top: 2px;">
+            <span>
+              <strong>Hapus dataset mentah asal setelah selesai</strong><br>
+              <span style="font-size: 0.68rem; color: var(--text-muted);">Mencegah dataset dobel di menu <em>Datasets</em>. Hanya dataset final hasil augmentasi yang akan disimpan.</span>
+            </span>
+          </label>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Card 2: Preset Cepat (One-Click Presets) -->
+    <div class="card" style="margin-bottom: 1rem;">
+      <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); padding: 0.65rem 1rem;">
+        <div class="card-title" style="font-size: 0.82rem;">Preset Cepat Parameter</div>
+      </div>
+      <div class="card-body" style="padding: 0.75rem 1rem;">
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          <button type="button" class="preset-pill" onclick="applyPreset('conveyor')">Industri / Konveyor</button>
+          <button type="button" class="preset-pill" onclick="applyPreset('light')">Ringan / Standard</button>
+          <button type="button" class="preset-pill" onclick="applyPreset('extreme')">Ekstrem / Rotasi &amp; Zoom</button>
+          <button type="button" class="preset-pill" onclick="applyPreset('reset')">Reset Default</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: Detail Parameter Augmentasi -->
+    <div class="card" style="margin-bottom: 1rem;">
+      <div class="card-header" style="border-bottom: 1px solid var(--border-subtle);">
+        <div class="card-title">2. Konfigurasi Parameter Augmentasi</div>
+      </div>
+      <div class="card-body" style="padding: 1rem;">
+
+        <!-- Group A: Transformasi Geometris -->
+        <div class="param-group">
+          <div class="param-header">
+            <span class="param-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+              Transformasi Geometris
+            </span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">BBox Otomatis Disesuaikan</span>
+          </div>
+          <div class="param-content">
+            
+            <!-- Horizontal Flip -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">Flip Horizontal (Cermin Kiri-Kanan)</div>
+                <div style="font-size: 0.68rem; color: var(--text-muted);">Peluang 50% membalikkan gambar horizontal</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="param-hflip" checked onchange="triggerPreviewDebounced()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Vertical Flip -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">Flip Vertikal (Cermin Atas-Bawah)</div>
+                <div style="font-size: 0.68rem; color: var(--text-muted);">Gunakan jika orientasi atas-bawah fleksibel</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="param-vflip" onchange="triggerPreviewDebounced()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Rotasi -->
+            <div style="margin-bottom: 12px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.05);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="param-rotate" checked onchange="triggerPreviewDebounced()">
+                  <span>Rotasi Bebas</span>
+                </label>
+                <span id="label-rotate-val" style="font-size: 0.74rem; font-family: monospace; color: #38bdf8; font-weight: 700;">±15°</span>
+              </div>
+              <input type="range" id="param-rotate-limit" min="5" max="45" value="15" class="form-control" style="padding: 0;" oninput="document.getElementById('label-rotate-val').innerText='±' + this.value + '°'; triggerPreviewDebounced();">
+            </div>
+
+            <!-- Zoom / Skala -->
+            <div style="margin-bottom: 12px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.05);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="param-scale" checked onchange="triggerPreviewDebounced()">
+                  <span>Skala &amp; Zoom (In/Out)</span>
+                </label>
+                <span id="label-scale-val" style="font-size: 0.74rem; font-family: monospace; color: #38bdf8; font-weight: 700;">0.85x – 1.15x</span>
+              </div>
+              <input type="range" id="param-scale-range" min="5" max="30" value="15" class="form-control" style="padding: 0;" oninput="const v = (this.value/100).toFixed(2); document.getElementById('label-scale-val').innerText=(1-v).toFixed(2)+'x – '+(1+parseFloat(v)).toFixed(2)+'x'; triggerPreviewDebounced();">
+            </div>
+
+            <!-- Translasi / Shift -->
+            <div style="padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.05);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="param-translate" onchange="triggerPreviewDebounced()">
+                  <span>Translasi (Geser Posisi)</span>
+                </label>
+                <span id="label-translate-val" style="font-size: 0.74rem; font-family: monospace; color: #38bdf8; font-weight: 700;">±8%</span>
+              </div>
+              <input type="range" id="param-translate-limit" min="3" max="15" value="8" class="form-control" style="padding: 0;" oninput="document.getElementById('label-translate-val').innerText='±' + this.value + '%'; triggerPreviewDebounced();">
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Group B: Warna & Fotometrik -->
+        <div class="param-group">
+          <div class="param-header">
+            <span class="param-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              Cahaya &amp; Warna (Fotometrik)
+            </span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">Variasi Pencahayaan</span>
+          </div>
+          <div class="param-content">
+            
+            <!-- Brightness -->
+            <div style="margin-bottom: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="param-brightness" checked onchange="triggerPreviewDebounced()">
+                  <span>Kecerahan (Brightness)</span>
+                </label>
+                <span id="label-bright-val" style="font-size: 0.74rem; font-family: monospace; color: #fbbf24; font-weight: 700;">±20%</span>
+              </div>
+              <input type="range" id="param-brightness-limit" min="5" max="40" value="20" class="form-control" style="padding: 0;" oninput="document.getElementById('label-bright-val').innerText='±' + this.value + '%'; triggerPreviewDebounced();">
+            </div>
+
+            <!-- Contrast -->
+            <div style="margin-bottom: 10px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.05);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="param-contrast" checked onchange="triggerPreviewDebounced()">
+                  <span>Kontras (Contrast)</span>
+                </label>
+                <span id="label-contrast-val" style="font-size: 0.74rem; font-family: monospace; color: #fbbf24; font-weight: 700;">±20%</span>
+              </div>
+              <input type="range" id="param-contrast-limit" min="5" max="40" value="20" class="form-control" style="padding: 0;" oninput="document.getElementById('label-contrast-val').innerText='±' + this.value + '%'; triggerPreviewDebounced();">
+            </div>
+
+            <!-- Grayscale -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.05);">
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">Konversi Hitam-Putih (Grayscale)</div>
+                <div style="font-size: 0.68rem; color: var(--text-muted);">Peluang 30% gambar diubah monokrom</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="param-grayscale" onchange="triggerPreviewDebounced()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Group C: Noise & Kondisi Pabrik -->
+        <div class="param-group">
+          <div class="param-header">
+            <span class="param-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg>
+              Noise &amp; Blur (Kondisi Kamera)
+            </span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">Getaran &amp; Sensor</span>
+          </div>
+          <div class="param-content">
+            
+            <!-- Motion Blur -->
+            <div style="margin-bottom: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="param-blur" onchange="triggerPreviewDebounced()">
+                  <span>Motion Blur (Simulasi Gerak Konveyor)</span>
+                </label>
+                <select id="param-blur-type" class="form-select" style="width: auto; padding: 2px 6px; font-size: 0.7rem;" onchange="triggerPreviewDebounced()">
+                  <option value="motion" selected>Motion Blur</option>
+                  <option value="gaussian">Gaussian Blur</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Sensor Noise -->
+            <div style="padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.05);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="param-noise" onchange="triggerPreviewDebounced()">
+                  <span>Sensor Grain / Noise Kamera</span>
+                </label>
+                <span id="label-noise-val" style="font-size: 0.74rem; font-family: monospace; color: #34d399; font-weight: 700;">12 px</span>
+              </div>
+              <input type="range" id="param-noise-sigma" min="5" max="25" value="12" class="form-control" style="padding: 0;" oninput="document.getElementById('label-noise-val').innerText=this.value+' px'; triggerPreviewDebounced();">
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Group D: Oklusi / Cutout -->
+        <div class="param-group" style="margin-bottom: 0;">
+          <div class="param-header">
+            <span class="param-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+              Oklusi (Cutout / Random Erasing)
+            </span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">Objek Terhalang</span>
+          </div>
+          <div class="param-content">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">Cutout Patch (Simulasi Halangan Parsial)</div>
+                <div style="font-size: 0.68rem; color: var(--text-muted);">Menaruh 1–2 patch acak kecil untuk menguji ketahanan model</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="param-cutout" onchange="triggerPreviewDebounced()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==============================================================================
+       KOLOM KANAN: Live Preview Interaktif Contoh Hasil Augmentasi
+       ============================================================================== -->
+  <div class="aug-right-col">
+    
+    <!-- Live Preview Panel (Fills vertical space without overflowing) -->
+    <div class="card preview-main-card">
+      <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0.5rem 0.85rem; flex-shrink: 0;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="card-title" style="font-size: 0.84rem;">Live Preview Contoh Augmentasi</div>
+          <span class="badge badge-success" style="font-size: 0.65rem;">Real-time Math BBox</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <!-- Sample image picker -->
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <label style="font-size: 0.72rem; color: var(--text-secondary);">Sampel:</label>
+            <select id="select-sample-image" class="form-select" style="padding: 3px 6px; font-size: 0.72rem; max-width: 155px;" onchange="fetchLivePreview()">
+              <option value="">Memuat sampel...</option>
+            </select>
+          </div>
+
+          <label style="display: flex; align-items: center; gap: 4px; font-size: 0.72rem; cursor: pointer; color: var(--text-secondary);">
+            <input type="checkbox" id="toggle-preview-boxes" checked onchange="togglePreviewBoxes()">
+            <span>BBox</span>
+          </label>
+
+          <button type="button" class="btn btn-sm btn-secondary" onclick="fetchLivePreview()" style="padding: 3px 8px; font-size: 0.7rem; display: flex; align-items: center; gap: 5px;" title="Acak ulang variasi augmentasi dengan parameter saat ini">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+            <span>Acak Ulang</span>
+          </button>
+
+          <!-- View Mode Toggle: 1:1 Komparasi vs 4 Grid -->
+          <div class="view-mode-toggle" style="display: flex; background: rgba(255,255,255,0.04); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 2px;">
+            <button type="button" id="btn-mode-split" class="btn-mode active" onclick="setPreviewViewMode('split')" title="Mode Komparasi 1:1 (Besar & Jelas)">
+              ⊞ 1:1 Komparasi
+            </button>
+            <button type="button" id="btn-mode-grid" class="btn-mode" onclick="setPreviewViewMode('grid')" title="Mode 4 Card Grid (Semua Sekaligus)">
+              ⊞⊞ 4 Grid
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-body" style="padding: 0.65rem 0.85rem; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
+        
+        <!-- View 1: 1:1 Komparasi (Side-by-Side: Original vs Active Variation) - DEFAULT -->
+        <div id="container-view-split" class="preview-view-split">
+          
+          <!-- Original Card -->
+          <div class="preview-card" style="border: 1px solid rgba(56, 189, 248, 0.35);">
+            <div class="preview-card-header" style="background: rgba(56, 189, 248, 0.08); border-bottom: 1px solid rgba(56, 189, 248, 0.2); color: #38bdf8;">
+              <span>Original (Asli)</span>
+              <span id="orig-bbox-badge" class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 0.65rem; padding: 1px 6px;">0 box</span>
+            </div>
+            <div class="preview-canvas-container">
+              <canvas id="canvas-original"></canvas>
+              <div id="loading-original" style="position: absolute; color: var(--text-muted); font-size: 0.75rem;">Memuat...</div>
+            </div>
+            <div id="orig-meta-footer" class="preview-meta-footer" style="color: var(--cloud-300);">
+              Resolusi: -
+            </div>
+          </div>
+
+          <!-- Augmented Variation Card (With Switcher Tabs) -->
+          <div class="preview-card" style="border: 1px solid rgba(52, 211, 153, 0.35);">
+            <div class="preview-card-header" style="background: rgba(52, 211, 153, 0.08); border-bottom: 1px solid rgba(52, 211, 153, 0.2);">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span id="split-var-title-text" style="color: #34d399;">Variasi #1</span>
+                <span id="split-var-bbox-badge" class="badge" style="background: rgba(52, 211, 153, 0.15); color: #34d399; font-size: 0.65rem; padding: 1px 6px;">0 box</span>
+              </div>
+              <!-- Interactive Tab Switcher -->
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <button type="button" class="var-tab active" id="tab-btn-var1" onclick="selectVariation(0)">Variasi #1</button>
+                <button type="button" class="var-tab" id="tab-btn-var2" onclick="selectVariation(1)">Variasi #2</button>
+                <button type="button" class="var-tab" id="tab-btn-var3" onclick="selectVariation(2)">Variasi #3</button>
+              </div>
+            </div>
+            <div class="preview-canvas-container">
+              <canvas id="canvas-augmented-split"></canvas>
+              <div id="loading-augmented-split" style="position: absolute; display: none; color: var(--text-muted); font-size: 0.75rem;">Memuat...</div>
+            </div>
+            <div id="split-var-meta-footer" class="preview-meta-footer">
+              <span style="color: var(--text-muted); font-size: 0.68rem;">Menunggu pratinjau...</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- View 2: 4 Grid (Semua Variasi Sekaligus) - HIDDEN BY DEFAULT -->
+        <div id="container-view-grid" class="preview-view-grid" style="display: none;">
+          
+          <!-- Original Grid Card -->
+          <div class="preview-card" style="border: 1px solid rgba(56, 189, 248, 0.3);">
+            <div class="preview-card-header" style="padding: 3px 8px; color: #38bdf8; min-height: 26px;">
+              <span>Original</span>
+              <span id="orig-grid-bbox-badge" class="badge" style="font-size: 0.62rem; padding: 1px 5px;">0 box</span>
+            </div>
+            <div class="preview-canvas-container">
+              <canvas id="canvas-original-grid"></canvas>
+            </div>
+          </div>
+
+          <!-- Var 1 Grid Card -->
+          <div class="preview-card">
+            <div class="preview-card-header" style="padding: 3px 8px; color: #34d399; min-height: 26px;">
+              <span id="var1-title-text">Variasi #1</span>
+              <span id="var1-bbox-badge" class="badge badge-neutral" style="font-size: 0.62rem; padding: 1px 5px;">0 box</span>
+            </div>
+            <div class="preview-canvas-container">
+              <canvas id="canvas-var1"></canvas>
+              <div id="loading-var1" style="position: absolute; color: var(--text-muted); font-size: 0.75rem;">Memuat...</div>
+            </div>
+            <div id="var1-meta-footer" class="preview-meta-footer" style="min-height: 24px; padding: 2px 6px;">
+              <span style="color: var(--text-muted); font-size: 0.65rem;">-</span>
+            </div>
+          </div>
+
+          <!-- Var 2 Grid Card -->
+          <div class="preview-card">
+            <div class="preview-card-header" style="padding: 3px 8px; color: #fbbf24; min-height: 26px;">
+              <span id="var2-title-text">Variasi #2</span>
+              <span id="var2-bbox-badge" class="badge badge-neutral" style="font-size: 0.62rem; padding: 1px 5px;">0 box</span>
+            </div>
+            <div class="preview-canvas-container">
+              <canvas id="canvas-var2"></canvas>
+              <div id="loading-var2" style="position: absolute; color: var(--text-muted); font-size: 0.75rem;">Memuat...</div>
+            </div>
+            <div id="var2-meta-footer" class="preview-meta-footer" style="min-height: 24px; padding: 2px 6px;">
+              <span style="color: var(--text-muted); font-size: 0.65rem;">-</span>
+            </div>
+          </div>
+
+          <!-- Var 3 Grid Card -->
+          <div class="preview-card">
+            <div class="preview-card-header" style="padding: 3px 8px; color: #c084fc; min-height: 26px;">
+              <span id="var3-title-text">Variasi #3</span>
+              <span id="var3-bbox-badge" class="badge badge-neutral" style="font-size: 0.62rem; padding: 1px 5px;">0 box</span>
+            </div>
+            <div class="preview-canvas-container">
+              <canvas id="canvas-var3"></canvas>
+              <div id="loading-var3" style="position: absolute; color: var(--text-muted); font-size: 0.75rem;">Memuat...</div>
+            </div>
+            <div id="var3-meta-footer" class="preview-meta-footer" style="min-height: 24px; padding: 2px 6px;">
+              <span style="color: var(--text-muted); font-size: 0.65rem;">-</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Execution Bar Card (Compact & Anchored at Bottom) -->
+    <div class="card" style="border: 1px solid rgba(56, 189, 248, 0.35); background: linear-gradient(180deg, rgba(14, 23, 42, 0.85) 0%, rgba(15, 23, 42, 0.98) 100%); flex-shrink: 0; margin-bottom: 0;">
+      <div class="card-body" style="padding: 0.7rem 1.15rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div>
+          <div style="font-size: 0.86rem; font-weight: 700; color: #fff;">Siap Menjalankan Augmentasi Dataset?</div>
+          <div id="summary-estimate-text" style="font-size: 0.74rem; color: var(--text-secondary); margin-top: 2px;">
+            Estimasi: Memproses subset train dengan multiplier 2x
+          </div>
+        </div>
+
+        <button type="button" id="btn-start-aug" class="btn btn-primary" onclick="startAugmentationJob()" style="padding: 0.55rem 1.25rem; font-weight: 700; font-size: 0.82rem; box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4); display: flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Mulai Augmentasi Dataset
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ==============================================================================
+     MODAL: Progress Bar Eksekusi Augmentasi (Background Polling)
+     ============================================================================== -->
+<div id="modal-aug-progress" class="modal-overlay" style="display: none; z-index: 2000;">
+  <div class="card" style="max-width: 520px; width: 92%; margin: auto; background: #0c121e; border: 1px solid rgba(56, 189, 248, 0.4); box-shadow: 0 24px 60px rgba(0,0,0,0.85);" onclick="event.stopPropagation()">
+    
+    <div class="card-header" style="border-bottom: 1px solid var(--border-subtle);">
+      <div class="card-title" style="display: flex; align-items: center; gap: 8px;">
+        <span id="spinner-icon" class="status-indicator status-training" style="width: 10px; height: 10px;"></span>
+        <span id="modal-progress-title">Memproses Augmentasi Dataset...</span>
+      </div>
+    </div>
+
+    <div class="card-body" style="padding: 1.5rem;">
+      <div id="modal-progress-msg" style="font-size: 0.82rem; color: #fff; margin-bottom: 0.75rem; font-weight: 500;">
+        Menyiapkan file gambar dan label...
+      </div>
+
+      <!-- Animated Progress Bar -->
+      <div style="width: 100%; height: 12px; background: #1e293b; border-radius: 6px; overflow: hidden; margin-bottom: 0.75rem; border: 1px solid rgba(255,255,255,0.05);">
+        <div id="aug-progress-bar" style="width: 5%; height: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8); transition: width 0.3s ease; border-radius: 6px;"></div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+        <span id="aug-processed-count">0 file diproses</span>
+        <span id="aug-progress-pct" style="font-family: monospace; font-weight: 700; color: #38bdf8;">5%</span>
+      </div>
+
+      <!-- Action Buttons (Shown on completion or error) -->
+      <div id="modal-actions-box" style="display: none; flex-direction: column; gap: 8px; border-top: 1px solid var(--border-subtle); padding-top: 1rem;">
+        <a id="btn-goto-detail" href="#" class="btn btn-primary" style="justify-content: center;">
+          Lihat Detail Dataset Baru
+        </a>
+        <div style="display: flex; gap: 8px;">
+          <a id="btn-goto-train" href="#" class="btn btn-secondary" style="flex: 1; justify-content: center; font-size: 0.78rem;">
+            Gunakan untuk Training
+          </a>
+          <button type="button" class="btn btn-secondary" onclick="closeProgressModal()" style="padding: 6px 12px; font-size: 0.78rem;">
+            Tutup
+          </button>
+        </div>
+      </div>
+
+      <div id="modal-error-box" style="display: none; padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); font-size: 0.78rem; color: #f87171; margin-top: 1rem;">
+        <span id="modal-error-text">Terjadi kesalahan</span>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="closeProgressModal()" style="margin-top: 8px; width: 100%;">Tutup</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  let cachedPreviewData = null;
+  let previewDebounceTimer = null;
+  let activeJobId = null;
+  let progressPollingInterval = null;
+
+  const PALETTE = [
+    '#38bdf8', '#34d399', '#f43f5e', '#fbbf24', '#a855f7',
+    '#fb923c', '#4ade80', '#818cf8', '#f472b6', '#2dd4bf'
+  ];
+
+  function getClassColor(id) {
+    return PALETTE[Math.abs(id || 0) % PALETTE.length];
+  }
+
+  // ==========================================
+  // Inisialisasi Halaman
+  // ==========================================
+  document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const fromSplit = urlParams.get('from_split');
+    const replaceSource = urlParams.get('replace_source');
+
+    if (fromSplit === '1') {
+      const banner = document.getElementById('split-direct-banner');
+      if (banner) banner.style.display = 'flex';
+      const chk = document.getElementById('check-replace-source');
+      if (chk) chk.checked = true;
+    } else if (replaceSource === '1') {
+      const chk = document.getElementById('check-replace-source');
+      if (chk) chk.checked = true;
+    }
+
+    onSourceDatasetChange();
+  });
+
+  function onSourceDatasetChange() {
+    const sel = document.getElementById('select-source-dataset');
+    if (!sel || !sel.value) return;
+
+    const opt = sel.options[sel.selectedIndex];
+    const dsName = opt.getAttribute('data-name') || 'dataset';
+    const mult = document.getElementById('select-multiplier').value;
+
+    // Auto update suggested dataset name
+    const inputName = document.getElementById('input-new-dataset-name');
+    if (inputName) {
+      inputName.value = `${dsName}_aug_${mult}x`;
+    }
+
+    updateEstimatedOutput();
+    loadDatasetSamples(sel.value);
+  }
+
+  function updateEstimatedOutput() {
+    const sel = document.getElementById('select-source-dataset');
+    if (!sel || !sel.value) return;
+
+    const opt = sel.options[sel.selectedIndex];
+    const trainCount = parseInt(opt.getAttribute('data-train') || 0);
+    const valCount = parseInt(opt.getAttribute('data-val') || 0);
+    const testCount = parseInt(opt.getAttribute('data-test') || 0);
+
+    const mult = parseInt(document.getElementById('select-multiplier').value);
+    const includeOrig = document.getElementById('check-include-original').checked;
+    const subset = document.querySelector('input[name="target-subset"]:checked').value;
+
+    let targetCount = trainCount;
+    let labelSubset = "train";
+    if (subset === 'train_val') {
+      targetCount = trainCount + valCount;
+      labelSubset = "train & val";
+    } else if (subset === 'all') {
+      targetCount = trainCount + valCount + testCount;
+      labelSubset = "semua subset";
+    }
+
+    const augGenerated = targetCount * mult;
+    const totalOutput = (includeOrig ? (trainCount + valCount + testCount) : 0) + augGenerated;
+
+    document.getElementById('summary-estimate-text').innerText = 
+      `Dataset Asal: ${targetCount} gambar (${labelSubset}) × ${mult}x = +${augGenerated} gambar baru. Estimasi Total Akhir: ~${totalOutput} gambar.`;
+
+    const dsName = opt.getAttribute('data-name') || 'dataset';
+    document.getElementById('input-new-dataset-name').value = `${dsName}_aug_${mult}x`;
+  }
+
+  // ==========================================
+  // Manajemen Sampel & Live Preview
+  // ==========================================
+  async function loadDatasetSamples(datasetId) {
+    const selSample = document.getElementById('select-sample-image');
+    selSample.innerHTML = '<option value="">Memuat sampel...</option>';
+
+    try {
+      const res = await fetch(`/augmentation/samples/${datasetId}`);
+      const data = await res.json();
+      selSample.innerHTML = '';
+
+      if (data.success && data.samples.length > 0) {
+        data.samples.forEach((fn, idx) => {
+          const opt = document.createElement('option');
+          opt.value = fn;
+          opt.text = fn;
+          if (idx === 0) opt.selected = true;
+          selSample.appendChild(opt);
+        });
+        fetchLivePreview();
+      } else {
+        selSample.innerHTML = '<option value="">Tidak ada sampel gambar</option>';
+      }
+    } catch (e) {
+      selSample.innerHTML = '<option value="">Gagal memuat sampel</option>';
+    }
+  }
+
+  function getAugmentationConfig() {
+    return {
+      hflip: document.getElementById('param-hflip').checked,
+      hflip_p: 0.5,
+      vflip: document.getElementById('param-vflip').checked,
+      vflip_p: 0.5,
+      rotate: document.getElementById('param-rotate').checked,
+      rotate_limit: parseFloat(document.getElementById('param-rotate-limit').value),
+      scale: document.getElementById('param-scale').checked,
+      scale_min: (1.0 - parseFloat(document.getElementById('param-scale-range').value) / 100.0),
+      scale_max: (1.0 + parseFloat(document.getElementById('param-scale-range').value) / 100.0),
+      translate: document.getElementById('param-translate').checked,
+      translate_limit: parseFloat(document.getElementById('param-translate-limit').value) / 100.0,
+      brightness: document.getElementById('param-brightness').checked,
+      brightness_limit: parseFloat(document.getElementById('param-brightness-limit').value) / 100.0,
+      contrast: document.getElementById('param-contrast').checked,
+      contrast_limit: parseFloat(document.getElementById('param-contrast-limit').value) / 100.0,
+      grayscale: document.getElementById('param-grayscale').checked,
+      grayscale_p: 0.35,
+      blur: document.getElementById('param-blur').checked,
+      blur_type: document.getElementById('param-blur-type').value,
+      blur_ksize: 7,
+      noise: document.getElementById('param-noise').checked,
+      noise_sigma: parseFloat(document.getElementById('param-noise-sigma').value),
+      cutout: document.getElementById('param-cutout').checked,
+      cutout_patches: 2,
+      cutout_size: 0.08
+    };
+  }
+
+  let currentPreviewMode = 'split'; // 'split' | 'grid'
+  let currentVariationIdx = 0; // 0, 1, 2
+
+  function setPreviewViewMode(mode) {
+    currentPreviewMode = mode;
+    const splitContainer = document.getElementById('container-view-split');
+    const gridContainer = document.getElementById('container-view-grid');
+    const btnSplit = document.getElementById('btn-mode-split');
+    const btnGrid = document.getElementById('btn-mode-grid');
+
+    if (mode === 'split') {
+      if (splitContainer) splitContainer.style.display = 'grid';
+      if (gridContainer) gridContainer.style.display = 'none';
+      if (btnSplit) btnSplit.classList.add('active');
+      if (btnGrid) btnGrid.classList.remove('active');
+    } else {
+      if (splitContainer) splitContainer.style.display = 'none';
+      if (gridContainer) gridContainer.style.display = 'grid';
+      if (btnSplit) btnSplit.classList.remove('active');
+      if (btnGrid) btnGrid.classList.add('active');
+    }
+    renderAllCanvases();
+  }
+
+  function selectVariation(idx) {
+    currentVariationIdx = idx;
+    [0, 1, 2].forEach(i => {
+      const btn = document.getElementById(`tab-btn-var${i + 1}`);
+      if (btn) {
+        if (i === idx) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+    });
+    renderSplitAugmentedView();
+  }
+
+  function renderSplitAugmentedView() {
+    if (!cachedPreviewData) return;
+    const showBoxes = document.getElementById('toggle-preview-boxes').checked;
+    const vars = cachedPreviewData.variations || [];
+    const v = vars[currentVariationIdx];
+
+    const titleEl = document.getElementById('split-var-title-text');
+    const badgeEl = document.getElementById('split-var-bbox-badge');
+    const footerEl = document.getElementById('split-var-meta-footer');
+
+    if (titleEl) titleEl.innerText = `Variasi #${currentVariationIdx + 1}`;
+
+    if (v) {
+      renderSingleCanvas('canvas-augmented-split', v.image_url, v.boxes, showBoxes);
+      if (badgeEl) badgeEl.innerText = `${v.boxes ? v.boxes.length : 0} box`;
+
+      if (footerEl) {
+        const applied = v.applied_transforms || [];
+        if (applied.length > 0) {
+          footerEl.innerHTML = applied.map(t => {
+            return `<span class="aug-param-chip" title="${t}">${t}</span>`;
+          }).join('');
+        } else {
+          footerEl.innerHTML = `<span style="font-size: 0.68rem; color: var(--text-muted);">Asli (Tanpa Efek Acak Terpilih)</span>`;
+        }
+      }
+    }
+  }
+
+  function triggerPreviewDebounced() {
+    clearTimeout(previewDebounceTimer);
+    previewDebounceTimer = setTimeout(() => {
+      fetchLivePreview();
+    }, 250);
+  }
+
+  async function fetchLivePreview() {
+    const datasetId = document.getElementById('select-source-dataset').value;
+    const sampleFn = document.getElementById('select-sample-image').value;
+    if (!datasetId) return;
+
+    ['original', 'augmented-split', 'var1', 'var2', 'var3'].forEach(k => {
+      const loader = document.getElementById(`loading-${k}`);
+      if (loader) loader.style.display = 'block';
+    });
+
+    try {
+      const config = getAugmentationConfig();
+      const res = await fetch('/augmentation/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dataset_id: datasetId,
+          sample_filename: sampleFn,
+          config: config,
+          num_variations: 3
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        cachedPreviewData = data;
+        renderAllCanvases();
+      }
+    } catch (e) {
+      console.error("Preview error:", e);
+    } finally {
+      ['original', 'augmented-split', 'var1', 'var2', 'var3'].forEach(k => {
+        const loader = document.getElementById(`loading-${k}`);
+        if (loader) loader.style.display = 'none';
+      });
+    }
+  }
+
+  function renderAllCanvases() {
+    if (!cachedPreviewData) return;
+    const showBoxes = document.getElementById('toggle-preview-boxes').checked;
+
+    // Render Original on Split view
+    const orig = cachedPreviewData.original;
+    if (orig) {
+      renderSingleCanvas('canvas-original', orig.image_url, orig.boxes, showBoxes);
+      const origBadge = document.getElementById('orig-bbox-badge');
+      if (origBadge) origBadge.innerText = `${orig.boxes ? orig.boxes.length : 0} box`;
+      const origFooter = document.getElementById('orig-meta-footer');
+      if (origFooter) origFooter.innerText = `${orig.filename} (${orig.width} × ${orig.height} px)`;
+
+      // Render Original on Grid view as well
+      const origGridBadge = document.getElementById('orig-grid-bbox-badge');
+      if (origGridBadge) origGridBadge.innerText = `${orig.boxes ? orig.boxes.length : 0} box`;
+      renderSingleCanvas('canvas-original-grid', orig.image_url, orig.boxes, showBoxes);
+    }
+
+    // Render active variation on Split view
+    renderSplitAugmentedView();
+
+    // Render Variations on Grid view
+    const vars = cachedPreviewData.variations || [];
+    ['var1', 'var2', 'var3'].forEach((k, idx) => {
+      const v = vars[idx];
+      const canvasId = `canvas-${k}`;
+      const badgeId = `${k}-bbox-badge`;
+      const footerId = `${k}-meta-footer`;
+      const titleId = `${k}-title-text`;
+      if (v) {
+        renderSingleCanvas(canvasId, v.image_url, v.boxes, showBoxes);
+        const b = document.getElementById(badgeId);
+        if (b) b.innerText = `${v.boxes ? v.boxes.length : 0} box`;
+
+        const titleEl = document.getElementById(titleId);
+        if (titleEl) {
+          titleEl.innerText = `Variasi #${idx + 1}`;
+        }
+
+        const footerEl = document.getElementById(footerId);
+        if (footerEl) {
+          const applied = v.applied_transforms || [];
+          if (applied.length > 0) {
+            footerEl.innerHTML = applied.map(t => {
+              return `<span class="aug-param-chip" title="${t}">${t}</span>`;
+            }).join('');
+          } else {
+            footerEl.innerHTML = `<span style="font-size: 0.65rem; color: var(--text-muted);">-</span>`;
+          }
+        }
+      }
+    });
+  }
+
+  function renderSingleCanvas(canvasId, imageUrl, boxes, showBoxes) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function() {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      if (showBoxes && boxes && boxes.length > 0) {
+        const scaleFactor = Math.max(1, canvas.width / 800);
+        const strokeW = Math.max(2, Math.round(2.5 * scaleFactor));
+        const fontPx = Math.max(11, Math.round(13 * scaleFactor));
+
+        boxes.forEach(b => {
+          const color = getClassColor(b.class_id);
+          const x = (b.cx - b.w / 2) * canvas.width;
+          const y = (b.cy - b.h / 2) * canvas.height;
+          const w = b.w * canvas.width;
+          const h = b.h * canvas.height;
+
+          // Fill semi transparan
+          ctx.fillStyle = color + '26';
+          ctx.fillRect(x, y, w, h);
+
+          // Border
+          ctx.strokeStyle = color;
+          ctx.lineWidth = strokeW;
+          ctx.strokeRect(x, y, w, h);
+
+          // Label
+          const label = b.class_name || `Class ${b.class_id}`;
+          ctx.font = `600 ${fontPx}px Poppins, sans-serif`;
+          const textMetrics = ctx.measureText(label);
+          const padX = 6 * scaleFactor;
+          const tagH = fontPx + 8 * scaleFactor;
+          const tagW = textMetrics.width + padX * 2;
+          const tagY = Math.max(0, y - tagH);
+
+          ctx.fillStyle = color;
+          ctx.fillRect(x, tagY, tagW, tagH);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(label, x + padX, tagY + tagH - 4 * scaleFactor);
+        });
+      }
+    };
+    img.src = imageUrl;
+  }
+
+  function togglePreviewBoxes() {
+    renderAllCanvases();
+  }
+
+  // ==========================================
+  // Presets Cepat
+  // ==========================================
+  function applyPreset(preset) {
+    if (preset === 'conveyor') {
+      // Industri: motion blur, rotasi kecil, brightness
+      document.getElementById('param-hflip').checked = true;
+      document.getElementById('param-vflip').checked = false;
+      document.getElementById('param-rotate').checked = true;
+      document.getElementById('param-rotate-limit').value = 10;
+      document.getElementById('label-rotate-val').innerText = '±10°';
+      document.getElementById('param-scale').checked = false;
+      document.getElementById('param-translate').checked = true;
+      document.getElementById('param-brightness').checked = true;
+      document.getElementById('param-contrast').checked = true;
+      document.getElementById('param-grayscale').checked = false;
+      document.getElementById('param-blur').checked = true;
+      document.getElementById('param-blur-type').value = 'motion';
+      document.getElementById('param-noise').checked = true;
+      document.getElementById('param-cutout').checked = false;
+    } else if (preset === 'light') {
+      // Ringan / Standar: flip horizontal dan sedikit cahaya
+      document.getElementById('param-hflip').checked = true;
+      document.getElementById('param-vflip').checked = false;
+      document.getElementById('param-rotate').checked = false;
+      document.getElementById('param-scale').checked = false;
+      document.getElementById('param-translate').checked = false;
+      document.getElementById('param-brightness').checked = true;
+      document.getElementById('param-brightness-limit').value = 15;
+      document.getElementById('label-bright-val').innerText = '±15%';
+      document.getElementById('param-contrast').checked = true;
+      document.getElementById('param-grayscale').checked = false;
+      document.getElementById('param-blur').checked = false;
+      document.getElementById('param-noise').checked = false;
+      document.getElementById('param-cutout').checked = false;
+    } else if (preset === 'extreme') {
+      // Ekstrem: hampir semua aktif
+      document.getElementById('param-hflip').checked = true;
+      document.getElementById('param-vflip').checked = true;
+      document.getElementById('param-rotate').checked = true;
+      document.getElementById('param-rotate-limit').value = 30;
+      document.getElementById('label-rotate-val').innerText = '±30°';
+      document.getElementById('param-scale').checked = true;
+      document.getElementById('param-scale-range').value = 20;
+      document.getElementById('label-scale-val').innerText = '0.80x – 1.20x';
+      document.getElementById('param-translate').checked = true;
+      document.getElementById('param-brightness').checked = true;
+      document.getElementById('param-contrast').checked = true;
+      document.getElementById('param-grayscale').checked = true;
+      document.getElementById('param-blur').checked = true;
+      document.getElementById('param-noise').checked = true;
+      document.getElementById('param-cutout').checked = true;
+    } else if (preset === 'reset') {
+      // Default
+      document.getElementById('param-hflip').checked = true;
+      document.getElementById('param-vflip').checked = false;
+      document.getElementById('param-rotate').checked = true;
+      document.getElementById('param-rotate-limit').value = 15;
+      document.getElementById('label-rotate-val').innerText = '±15%';
+      document.getElementById('param-scale').checked = true;
+      document.getElementById('param-scale-range').value = 15;
+      document.getElementById('label-scale-val').innerText = '0.85x – 1.15x';
+      document.getElementById('param-translate').checked = false;
+      document.getElementById('param-brightness').checked = true;
+      document.getElementById('param-contrast').checked = true;
+      document.getElementById('param-grayscale').checked = false;
+      document.getElementById('param-blur').checked = false;
+      document.getElementById('param-noise').checked = false;
+      document.getElementById('param-cutout').checked = false;
+    }
+
+    triggerPreviewDebounced();
+  }
+
+  // ==========================================
+  // Eksekusi Augmentasi Batch
+  // ==========================================
+  async function startAugmentationJob() {
+    const datasetId = document.getElementById('select-source-dataset').value;
+    const newName = document.getElementById('input-new-dataset-name').value.trim();
+    if (!datasetId) {
+      alert("Pilih dataset sumber terlebih dahulu!");
+      return;
+    }
+
+    const mult = parseInt(document.getElementById('select-multiplier').value);
+    const includeOrig = document.getElementById('check-include-original').checked;
+    const subset = document.querySelector('input[name="target-subset"]:checked').value;
+    const config = getAugmentationConfig();
+    const replaceSource = document.getElementById('check-replace-source') ? document.getElementById('check-replace-source').checked : false;
+
+    const btn = document.getElementById('btn-start-aug');
+    btn.disabled = true;
+
+    // Tampilkan modal progress
+    const modal = document.getElementById('modal-aug-progress');
+    modal.style.display = 'flex';
+    document.getElementById('modal-progress-title').innerText = "Memproses Augmentasi Dataset...";
+    document.getElementById('modal-progress-msg').innerText = "Menyiapkan antrian background worker...";
+    document.getElementById('aug-progress-bar').style.width = "5%";
+    document.getElementById('aug-progress-pct').innerText = "5%";
+    document.getElementById('aug-processed-count').innerText = "0 file diproses";
+    document.getElementById('modal-actions-box').style.display = "none";
+    document.getElementById('modal-error-box').style.display = "none";
+
+    try {
+      const res = await fetch('/augmentation/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_dataset_id: datasetId,
+          new_dataset_name: newName,
+          config: config,
+          target_subset: subset,
+          multiplier: mult,
+          include_original: includeOrig,
+          replace_source: replaceSource
+        })
+      });
+
+      const data = await res.json();
+      if (data.success && data.job_id) {
+        activeJobId = data.job_id;
+        startPollingProgress(activeJobId);
+      } else {
+        showJobError(data.error || "Gagal memulai tugas augmentasi");
+      }
+    } catch (e) {
+      showJobError("Kesalahan jaringan: " + e.message);
+    }
+  }
+
+  function startPollingProgress(jobId) {
+    clearInterval(progressPollingInterval);
+    progressPollingInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/augmentation/progress/${jobId}`);
+        const data = await res.json();
+        if (data.success && data.job) {
+          const job = data.job;
+          document.getElementById('aug-progress-bar').style.width = `${job.progress || 5}%`;
+          document.getElementById('aug-progress-pct').innerText = `${job.progress || 5}%`;
+          document.getElementById('modal-progress-msg').innerText = job.message || "Memproses...";
+          document.getElementById('aug-processed-count').innerText = `${job.processed || 0} / ${job.total || 0} file`;
+
+          if (job.status === 'completed') {
+            clearInterval(progressPollingInterval);
+            document.getElementById('modal-progress-title').innerText = "Augmentasi Berhasil!";
+            document.getElementById('spinner-icon').className = "status-indicator status-completed";
+            document.getElementById('modal-actions-box').style.display = "flex";
+
+            if (job.new_dataset_id) {
+              document.getElementById('btn-goto-detail').href = `/datasets/${job.new_dataset_id}`;
+              document.getElementById('btn-goto-train').href = `/training/new?dataset_id=${job.new_dataset_id}`;
+            }
+            document.getElementById('btn-start-aug').disabled = false;
+          } else if (job.status === 'failed') {
+            clearInterval(progressPollingInterval);
+            showJobError(job.error || "Proses augmentasi gagal dijalankan.");
+          }
+        }
+      } catch (e) {
+        console.error("Polling error:", e);
+      }
+    }, 800);
+  }
+
+  function showJobError(errMsg) {
+    document.getElementById('spinner-icon').className = "status-indicator status-failed";
+    document.getElementById('modal-progress-title').innerText = "Augmentasi Gagal";
+    document.getElementById('modal-error-text').innerText = errMsg;
+    document.getElementById('modal-error-box').style.display = "block";
+    document.getElementById('btn-start-aug').disabled = false;
+  }
+
+  function closeProgressModal() {
+    clearInterval(progressPollingInterval);
+    document.getElementById('modal-aug-progress').style.display = "none";
+    document.getElementById('btn-start-aug').disabled = false;
+  }
+</script>
+{% endblock %}

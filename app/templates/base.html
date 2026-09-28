@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}YOLO Training Studio{% endblock %}</title>
+  <!-- Google Fonts: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet">
+  <!-- Local Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}">
+  <!-- Local Chart.js (PRD Section 28) -->
+  <script src="{{ url_for('static', filename='vendor/chart.js') }}"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Mobile Sidebar Backdrop -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleSidebar()"></div>
+
+    <!-- Modern Sidebar Navigation -->
+    <aside id="app-sidebar" class="sidebar">
+      <!-- 1. Brand -->
+      <div class="sidebar-header">
+        <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand">
+          <div class="brand-icon">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m21 16-4 4-4-4"/>
+              <path d="M17 20V4"/>
+              <path d="m3 8 4-4 4 4"/>
+              <path d="M7 4v16"/>
+            </svg>
+          </div>
+          <span class="brand-title">YOLO Studio</span>
+        </a>
+        <span class="brand-badge">v1.0</span>
+      </div>
+
+      <!-- 2. Active Project Switcher Widget -->
+      <div class="sidebar-project-box">
+        <div style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 5px; font-weight: 600;">
+          Ruang Kerja Project
+        </div>
+        <button type="button" id="project-pill-btn" onclick="toggleProjectDropdown(event)" style="width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: rgba(56, 189, 248, 0.07); border: 1px solid rgba(56, 189, 248, 0.22); border-radius: 8px; color: #fff; font-size: 0.78rem; cursor: pointer; text-align: left; transition: all 0.15s ease;">
+          <span style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 175px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400); flex-shrink: 0;">
+              <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+            </svg>
+            <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              {% if active_project %}{{ active_project.name }}{% else %}Semua Project{% endif %}
+            </strong>
+          </span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted); flex-shrink: 0;">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+
+        <!-- Dropdown Menu -->
+        <div id="project-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 4px); left: 1rem; right: 1rem; background: #0c121e; border: 1px solid var(--border-hover); border-radius: 8px; box-shadow: 0 16px 36px rgba(0,0,0,0.85); z-index: 1000; padding: 6px 0;">
+          <div style="padding: 6px 12px; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">
+            Pilih Ruang Kerja
+          </div>
+          <a href="{{ url_for('projects.set_active', project_id='all') }}" style="display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; font-size: 0.78rem; color: #fff; text-decoration: none; transition: background 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+                <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+              </svg>
+              Semua Project (Global)
+            </span>
+            {% if active_project_id == 'all' or not active_project %}
+              <span style="color: var(--success); font-weight: bold;">✓</span>
+            {% endif %}
+          </a>
+          <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 4px 0;"></div>
+          <!-- Daftar project dengan batas tinggi ~5 item dan scroll vertikal -->
+          <div style="max-height: 175px; overflow-y: auto; overscroll-behavior: contain;">
+            {% for prj in all_projects %}
+              <a href="{{ url_for('projects.set_active', project_id=prj.id) }}" style="display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; font-size: 0.78rem; color: #fff; text-decoration: none; transition: background 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                <span style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  <span style="width: 6px; height: 6px; border-radius: 50%; background: {% if active_project and active_project.id == prj.id %}var(--cloud-400){% else %}var(--text-muted){% endif %}; flex-shrink: 0;"></span>
+                  {{ prj.name }}
+                </span>
+                {% if active_project and active_project.id == prj.id %}
+                  <span style="color: var(--success); font-weight: bold;">✓</span>
+                {% endif %}
+              </a>
+            {% endfor %}
+          </div>
+          <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 4px 0;"></div>
+          <a href="{{ url_for('projects.index') }}" style="display: flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 0.78rem; color: var(--cloud-300); text-decoration: none; font-weight: 500;" onmouseover="this.style.background='rgba(56,189,248,0.08)'" onmouseout="this.style.background='transparent'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5v14"/><path d="M5 12h14"/>
+            </svg>
+            Kelola Project...
+          </a>
+        </div>
+      </div>
+
+      <!-- 3. Grouped Navigation Links -->
+      <nav class="sidebar-nav">
+        <!-- GROUP: WORKSPACE -->
+        <div class="sidebar-group-label">Workspace</div>
+        <a href="{{ url_for('projects.index') }}" class="nav-link {% if 'projects' in request.endpoint %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span>Projects</span>
+        </a>
+        <a href="{{ url_for('dashboard.index') }}" class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="7" height="9" x="3" y="3" rx="1"/>
+            <rect width="7" height="5" x="14" y="3" rx="1"/>
+            <rect width="7" height="9" x="14" y="12" rx="1"/>
+            <rect width="7" height="5" x="3" y="16" rx="1"/>
+          </svg>
+          <span>Dashboard</span>
+        </a>
+
+        <!-- GROUP: DATA & LABELING -->
+        <div class="sidebar-group-label" style="margin-top: 0.4rem;">Data &amp; Labeling</div>
+        <a href="{{ url_for('labeling.index') }}" class="nav-link {% if 'labeling' in request.endpoint %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m12 3-1.9 5.8a2 2 0 0 1-1.28 1.28L3 12l5.8 1.9a2 2 0 0 1 1.28 1.28L12 21l1.9-5.8a2 2 0 0 1 1.28-1.28L21 12l-5.8-1.9a2 2 0 0 1-1.28-1.28L12 3z"/>
+            <path d="M5 3v4"/>
+            <path d="M19 17v4"/>
+          </svg>
+          <span>Labeling Studio</span>
+        </a>
+        <a href="{{ url_for('datasets.list_datasets') }}" class="nav-link {% if 'datasets' in request.endpoint %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+          </svg>
+          <span>Datasets</span>
+        </a>
+        <a href="{{ url_for('augmentation.index') }}" class="nav-link {% if 'augmentation' in request.endpoint %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+          <span>Augmentasi</span>
+        </a>
+
+        <!-- GROUP: MODEL TRAINING -->
+        <div class="sidebar-group-label" style="margin-top: 0.4rem;">Training</div>
+        <a href="{{ url_for('training.new_training') }}" class="nav-link {% if request.endpoint == 'training.new_training' %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
+          <span>New Training</span>
+        </a>
+        <a href="{{ url_for('training.history') }}" class="nav-link {% if request.endpoint == 'training.history' %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Training Runs</span>
+        </a>
+
+        <!-- GROUP: TESTING & SYSTEM -->
+        <div class="sidebar-group-label" style="margin-top: 0.4rem;">Testing &amp; System</div>
+        <a href="{{ url_for('testing.index') }}" class="nav-link {% if 'testing' in request.endpoint %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="22" y1="12" x2="18" y2="12"/>
+            <line x1="6" y1="12" x2="2" y2="12"/>
+            <line x1="12" y1="6" x2="12" y2="2"/>
+            <line x1="12" y1="22" x2="12" y2="18"/>
+          </svg>
+          <span>Test Model</span>
+        </a>
+        <a href="{{ url_for('system.diagnostics') }}" class="nav-link {% if 'system' in request.endpoint %}active{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="16" height="16" x="4" y="4" rx="2"/>
+            <rect width="6" height="6" x="9" y="9" rx="1"/>
+            <path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>
+          </svg>
+          <span>Hardware &amp; System</span>
+        </a>
+      </nav>
+
+      <!-- 4. Sidebar Footer -->
+      <div class="sidebar-footer">
+        <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--cloud-300); margin-bottom: 2px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          Ultralytics Engine
+        </div>
+        <div>Local GPU Acceleration</div>
+      </div>
+    </aside>
+
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+      <!-- Topbar with page title, active project badge & mobile toggle -->
+      <header class="main-topbar">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button type="button" class="nav-toggle-btn" onclick="toggleSidebar()" aria-label="Toggle Sidebar" style="display: none; align-items: center; justify-content: center; width: 32px; height: 32px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); border-radius: 6px; color: #fff; cursor: pointer;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+          <div style="font-size: 0.85rem; font-weight: 600; color: #fff;">
+            {% block header_title %}YOLO Training Studio{% endblock %}
+          </div>
+        </div>
+        <div>
+          {% if active_project %}
+            <span class="badge" style="background: rgba(56, 189, 248, 0.08); color: var(--cloud-300); border: 1px solid var(--accent-border); font-size: 0.72rem; padding: 2px 8px;">
+              Project: {{ active_project.name }}
+            </span>
+          {% else %}
+            <span class="badge badge-neutral" style="font-size: 0.72rem; padding: 2px 8px;">
+              Semua Project (Global)
+            </span>
+          {% endif %}
+        </div>
+      </header>
+
+      <!-- Main Page Content -->
+      <main class="page-body">
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category if category != 'error' else 'error' }}">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+
+    <!-- Floating Real-Time GPU Indicator in Footer Area -->
+    <div id="floating-gpu-pill" class="floating-gpu-pill" onclick="openGpuModal()" title="Klik untuk membuka rincian telemetri GPU">
+      <div class="gpu-pulse-dot" id="gpu-pill-status-dot"></div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="gpu-pill-icon">
+        <rect width="16" height="16" x="4" y="4" rx="2"/>
+        <rect width="6" height="6" x="9" y="9" rx="1"/>
+        <path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>
+      </svg>
+      <span class="gpu-pill-name" id="gpu-pill-name">Memuat GPU...</span>
+      <span class="gpu-pill-divider"></span>
+      <span class="gpu-pill-stat" id="gpu-pill-load"><span style="color: var(--text-muted);">Load</span> <strong id="gpu-pill-load-val">--%</strong></span>
+      <span class="gpu-pill-stat" id="gpu-pill-vram"><span style="color: var(--text-muted);">VRAM</span> <strong id="gpu-pill-vram-val">-- GB</strong></span>
+      <span class="gpu-pill-stat" id="gpu-pill-temp"><strong id="gpu-pill-temp-val" style="color: var(--cloud-300);">--°C</strong></span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted); opacity: 0.7; margin-left: 2px;">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </div>
+
+    <!-- Modal Detail Info GPU -->
+    <div id="modal-gpu-detail" class="modal-overlay" onclick="closeGpuModal(event)">
+      <div class="gpu-modal-card" onclick="event.stopPropagation()">
+        <!-- Header -->
+        <div class="gpu-modal-header">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="gpu-modal-header-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="16" height="16" x="4" y="4" rx="2"/>
+                <rect width="6" height="6" x="9" y="9" rx="1"/>
+                <path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>
+              </svg>
+            </div>
+            <div>
+              <div style="font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
+                <span>Hardware & GPU Telemetry</span>
+                <span id="gpu-modal-live-badge" class="badge badge-success" style="font-size: 0.65rem; padding: 2px 7px;">LIVE 2s</span>
+              </div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">Real-time Hardware Status & Resource Inspector</div>
+            </div>
+          </div>
+          <button type="button" class="gpu-modal-close-btn" onclick="closeGpuModal()" title="Tutup (Esc)">&times;</button>
+        </div>
+
+        <!-- Body -->
+        <div class="gpu-modal-body">
+          <!-- Device Overview Card -->
+          <div class="gpu-device-box">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap;">
+              <div>
+                <div style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);">Nama Perangkat Akselerator</div>
+                <div id="gpu-modal-device-name" style="font-size: 1.05rem; font-weight: 700; color: #fff; margin-top: 3px;">
+                  Memuat data GPU...
+                </div>
+              </div>
+              <div id="gpu-modal-tags" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Gauges Grid -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+            <!-- Utilization -->
+            <div class="gpu-gauge-card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <span style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);">UTILISASI CORE</span>
+                <span id="gpu-modal-util-pct" style="font-size: 1.15rem; font-weight: 800; color: var(--cloud-300);">0%</span>
+              </div>
+              <div class="gpu-progress-track">
+                <div id="gpu-modal-util-bar" class="gpu-progress-bar" style="width: 0%; background: linear-gradient(90deg, var(--cloud-500), var(--cloud-300));"></div>
+              </div>
+              <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 0.35rem;">Beban pemrosesan CUDA</div>
+            </div>
+
+            <!-- VRAM -->
+            <div class="gpu-gauge-card">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <span style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);">PENGGUNAAN VRAM</span>
+                <span id="gpu-modal-vram-pct" style="font-size: 1.15rem; font-weight: 800; color: #a78bfa;">0%</span>
+              </div>
+              <div class="gpu-progress-track">
+                <div id="gpu-modal-vram-bar" class="gpu-progress-bar" style="width: 0%; background: linear-gradient(90deg, #7c3aed, #a78bfa);"></div>
+              </div>
+              <div id="gpu-modal-vram-detail" style="font-size: 0.68rem; color: var(--text-muted); margin-top: 0.35rem;">0 MB / 0 MB</div>
+            </div>
+          </div>
+
+          <!-- Metrics Row (Temp, Power, Clock) -->
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; margin-bottom: 0.85rem;">
+            <div class="gpu-metric-tile">
+              <div class="gpu-metric-tile-lbl">SUHU GPU</div>
+              <div id="gpu-modal-temp-val" class="gpu-metric-tile-val" style="color: var(--cloud-300);">--°C</div>
+              <div id="gpu-modal-temp-status" style="font-size: 0.65rem; color: var(--success);">Normal</div>
+            </div>
+            <div class="gpu-metric-tile">
+              <div class="gpu-metric-tile-lbl">KONSUMSI DAYA</div>
+              <div id="gpu-modal-power-val" class="gpu-metric-tile-val" style="color: #f59e0b;">-- W</div>
+              <div style="font-size: 0.65rem; color: var(--text-muted);">TDP Saat Ini</div>
+            </div>
+            <div class="gpu-metric-tile">
+              <div class="gpu-metric-tile-lbl">CLOCK GPU</div>
+              <div id="gpu-modal-clock-val" class="gpu-metric-tile-val" style="color: #38bdf8;">-- MHz</div>
+              <div id="gpu-modal-memclock-val" style="font-size: 0.65rem; color: var(--text-muted);">Mem: -- MHz</div>
+            </div>
+          </div>
+
+          <!-- Spec Details Table -->
+          <div class="gpu-spec-table">
+            <div class="gpu-spec-row">
+              <span>VRAM Bebas (Available Free):</span>
+              <strong id="gpu-modal-vram-free">0 MB</strong>
+            </div>
+            <div class="gpu-spec-row">
+              <span>Kecepatan Kipas (Fan Speed):</span>
+              <strong id="gpu-modal-fan-val">-- %</strong>
+            </div>
+            <div class="gpu-spec-row">
+              <span>Driver & Versi CUDA:</span>
+              <strong id="gpu-modal-driver-cuda">--</strong>
+            </div>
+            <div class="gpu-spec-row" style="border-bottom: none;">
+              <span>Update Frekuensi:</span>
+              <span style="color: var(--cloud-400);">Real-time (Auto-polling aktif)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="gpu-modal-footer">
+          <span id="gpu-modal-last-updated" style="font-size: 0.7rem; color: var(--text-muted);">
+            Sinkronisasi: Memuat...
+          </span>
+          <div style="display: flex; gap: 8px;">
+            <a href="{{ url_for('system.diagnostics') }}" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 4px 10px;">
+              System Diagnostik &rarr;
+            </a>
+            <button type="button" class="btn btn-primary btn-sm" onclick="closeGpuModal()" style="font-size: 0.72rem; padding: 4px 14px;">
+              Tutup
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* Floating GPU Widget Pill */
+    .floating-gpu-pill {
+      position: fixed;
+      bottom: 14px;
+      right: 20px;
+      z-index: 995;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: #0d1422;
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-sm);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+      cursor: pointer;
+      font-size: 0.75rem;
+      color: #e2e8f0;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .floating-gpu-pill:hover {
+      background: #131c30;
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #fff;
+    }
+    .gpu-pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+      flex-shrink: 0;
+    }
+    .gpu-pulse-dot.offline {
+      background: #8292a8;
+      box-shadow: none;
+    }
+    .gpu-pill-icon {
+      color: var(--cloud-400);
+      flex-shrink: 0;
+    }
+    .gpu-pill-name {
+      font-weight: 600;
+      color: #fff;
+      max-width: 140px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .gpu-pill-divider {
+      width: 1px;
+      height: 12px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .gpu-pill-stat {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    @media (max-width: 640px) {
+      .floating-gpu-pill {
+        bottom: 10px;
+        right: 12px;
+        padding: 5px 10px;
+        gap: 6px;
+      }
+      .gpu-pill-name, .gpu-pill-divider, #gpu-pill-vram, #gpu-pill-temp {
+        display: none !important;
+      }
+    }
+
+    /* GPU Detail Modal Styling */
+    .gpu-modal-card {
+      max-width: 580px;
+      width: 92%;
+      background: linear-gradient(180deg, #0e1628 0%, #080d16 100%);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 14px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(56, 189, 248, 0.12);
+      overflow: hidden;
+      position: relative;
+    }
+    .gpu-modal-header {
+      padding: 0.9rem 1.25rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(56, 189, 248, 0.03);
+    }
+    .gpu-modal-header-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--cloud-300);
+    }
+    .gpu-modal-close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 6px;
+      transition: color 0.15s ease;
+    }
+    .gpu-modal-close-btn:hover {
+      color: #fff;
+    }
+    .gpu-modal-body {
+      padding: 1.15rem 1.25rem;
+      max-height: 75vh;
+      overflow-y: auto;
+    }
+    .gpu-device-box {
+      padding: 0.75rem 0.95rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-card);
+      border-radius: 10px;
+      margin-bottom: 0.85rem;
+    }
+    .gpu-gauge-card {
+      padding: 0.75rem 0.95rem;
+      background: rgba(56, 189, 248, 0.03);
+      border: 1px solid rgba(56, 189, 248, 0.15);
+      border-radius: 10px;
+    }
+    .gpu-progress-track {
+      width: 100%;
+      height: 7px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .gpu-progress-bar {
+      height: 100%;
+      transition: width 0.4s ease;
+    }
+    .gpu-metric-tile {
+      padding: 0.65rem 0.5rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      text-align: center;
+    }
+    .gpu-metric-tile-lbl {
+      font-size: 0.63rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .gpu-metric-tile-val {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin: 2px 0;
+    }
+    .gpu-spec-table {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 0.5rem 0.85rem;
+      font-size: 0.75rem;
+    }
+    .gpu-spec-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-secondary);
+    }
+    .gpu-spec-row strong {
+      color: #fff;
+    }
+    .gpu-modal-footer {
+      padding: 0.75rem 1.25rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(56, 189, 248, 0.02);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+
+  <script>
+    // Toggle Project Dropdown Menu
+    function toggleProjectDropdown(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('project-dropdown-menu');
+      if (menu) {
+        menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+      }
+    }
+
+    // Close Dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+      const menu = document.getElementById('project-dropdown-menu');
+      const btn = document.getElementById('project-pill-btn');
+      if (menu && menu.style.display === 'block') {
+        if (!menu.contains(e.target) && (!btn || !btn.contains(e.target))) {
+          menu.style.display = 'none';
+        }
+      }
+    });
+
+    // Toggle Sidebar on Mobile
+    function toggleSidebar() {
+      const sidebar = document.getElementById('app-sidebar');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      if (sidebar) sidebar.classList.toggle('is-open');
+      if (backdrop) backdrop.classList.toggle('is-open');
+    }
+
+    // ==========================================
+    // Real-Time Floating GPU Telemetry & Modal
+    // ==========================================
+    let isGpuModalOpen = false;
+    let gpuPollTimer = null;
+
+    function formatGpuShortName(name) {
+      if (!name) return 'NVIDIA GPU';
+      return name.replace('NVIDIA GeForce ', '').replace('NVIDIA ', '');
+    }
+
+    function fetchGpuStatus() {
+      fetch('/system/api/gpu')
+        .then(res => res.json())
+        .then(data => {
+          updateGpuPillUI(data);
+          if (isGpuModalOpen) {
+            updateGpuModalUI(data);
+          }
+        })
+        .catch(err => {
+          console.warn('[GPU Telemetry] Error polling status:', err);
+        });
+    }
+
+    function updateGpuPillUI(data) {
+      const dot = document.getElementById('gpu-pill-status-dot');
+      const nameEl = document.getElementById('gpu-pill-name');
+      const loadVal = document.getElementById('gpu-pill-load-val');
+      const vramVal = document.getElementById('gpu-pill-vram-val');
+      const tempVal = document.getElementById('gpu-pill-temp-val');
+
+      if (data && data.available) {
+        dot.className = 'gpu-pulse-dot';
+        nameEl.innerText = formatGpuShortName(data.device_name);
+        nameEl.title = data.device_name;
+        
+        loadVal.innerText = `${data.utilization_gpu}%`;
+        const vramUsedGb = (data.vram_used_mb / 1024).toFixed(1);
+        const vramTotalGb = (data.vram_total_mb / 1024).toFixed(1);
+        vramVal.innerText = `${vramUsedGb}/${vramTotalGb}GB`;
+        
+        tempVal.innerText = `${data.temperature}°C`;
+        tempVal.style.color = (data.temperature >= 80) ? '#f87171' : (data.temperature >= 68 ? '#fbbf24' : 'var(--cloud-300)');
+      } else {
+        dot.className = 'gpu-pulse-dot offline';
+        nameEl.innerText = 'CPU Mode';
+        loadVal.innerText = '--';
+        vramVal.innerText = 'CPU Mem';
+        tempVal.innerText = '--';
+      }
+    }
+
+    function updateGpuModalUI(data) {
+      if (!data) return;
+
+      const deviceName = document.getElementById('gpu-modal-device-name');
+      const tagsContainer = document.getElementById('gpu-modal-tags');
+      const utilPct = document.getElementById('gpu-modal-util-pct');
+      const utilBar = document.getElementById('gpu-modal-util-bar');
+      const vramPct = document.getElementById('gpu-modal-vram-pct');
+      const vramBar = document.getElementById('gpu-modal-vram-bar');
+      const vramDetail = document.getElementById('gpu-modal-vram-detail');
+      const tempVal = document.getElementById('gpu-modal-temp-val');
+      const tempStatus = document.getElementById('gpu-modal-temp-status');
+      const powerVal = document.getElementById('gpu-modal-power-val');
+      const clockVal = document.getElementById('gpu-modal-clock-val');
+      const memclockVal = document.getElementById('gpu-modal-memclock-val');
+      const vramFree = document.getElementById('gpu-modal-vram-free');
+      const fanVal = document.getElementById('gpu-modal-fan-val');
+      const driverCuda = document.getElementById('gpu-modal-driver-cuda');
+      const lastUpdated = document.getElementById('gpu-modal-last-updated');
+
+      deviceName.innerText = data.device_name || 'Tidak ada GPU Terdeteksi';
+
+      // Badges
+      tagsContainer.innerHTML = '';
+      if (data.available) {
+        const createBadge = (text, colorVar) => {
+          const s = document.createElement('span');
+          s.className = 'badge';
+          s.style.background = 'rgba(56, 189, 248, 0.08)';
+          s.style.border = '1px solid var(--accent-border)';
+          s.style.color = colorVar || 'var(--cloud-300)';
+          s.style.fontSize = '0.68rem';
+          s.style.padding = '2px 8px';
+          s.innerText = text;
+          return s;
+        };
+
+        if (data.cuda_version && data.cuda_version !== 'N/A') {
+          tagsContainer.appendChild(createBadge(`CUDA ${data.cuda_version}`));
+        }
+        if (data.driver_version && data.driver_version !== 'N/A') {
+          tagsContainer.appendChild(createBadge(`Driver ${data.driver_version}`));
+        }
+        if (data.compute_capability && data.compute_capability !== 'N/A') {
+          tagsContainer.appendChild(createBadge(`Compute ${data.compute_capability}`));
+        }
+      }
+
+      // Util
+      const util = data.utilization_gpu || 0;
+      utilPct.innerText = `${util}%`;
+      utilBar.style.width = `${Math.min(100, Math.max(0, util))}%`;
+
+      // VRAM
+      const vramP = data.vram_pct || 0;
+      vramPct.innerText = `${vramP}%`;
+      vramBar.style.width = `${Math.min(100, Math.max(0, vramP))}%`;
+      vramDetail.innerText = `${data.vram_used_mb || 0} MB / ${data.vram_total_mb || 0} MB digunakan`;
+
+      // Temp
+      const temp = data.temperature || 0;
+      tempVal.innerText = `${temp}°C`;
+      if (temp < 60) {
+        tempStatus.innerText = 'Optimal / Dingin';
+        tempStatus.style.color = '#4ade80';
+      } else if (temp < 78) {
+        tempStatus.innerText = 'Normal Operasional';
+        tempStatus.style.color = '#38bdf8';
+      } else {
+        tempStatus.innerText = 'Tinggi / Throttle Warning';
+        tempStatus.style.color = '#f87171';
+      }
+
+      // Power & Clocks
+      powerVal.innerText = data.power_draw_w || '-- W';
+      clockVal.innerText = (data.clock_graphics_mhz && data.clock_graphics_mhz !== 'N/A') ? `${data.clock_graphics_mhz} MHz` : '-- MHz';
+      memclockVal.innerText = (data.clock_mem_mhz && data.clock_mem_mhz !== 'N/A') ? `Mem: ${data.clock_mem_mhz} MHz` : 'Mem: -- MHz';
+
+      // Table specs
+      vramFree.innerText = `${data.vram_free_mb || 0} MB (${((data.vram_free_mb || 0)/1024).toFixed(2)} GB)`;
+      fanVal.innerText = (data.fan_speed_pct !== undefined && data.fan_speed_pct !== 'N/A') ? `${data.fan_speed_pct}%` : 'Otomatis / 0%';
+      driverCuda.innerText = `Driver: ${data.driver_version || 'N/A'} • CUDA: ${data.cuda_version || 'N/A'}`;
+      
+      const now = new Date();
+      lastUpdated.innerText = `Sinkronisasi: ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')} WIB`;
+    }
+
+    function openGpuModal() {
+      isGpuModalOpen = true;
+      const modal = document.getElementById('modal-gpu-detail');
+      if (modal) {
+        modal.classList.add('active');
+      }
+      fetchGpuStatus();
+      restartPolling(2000); // Poll lebih cepat saat modal terbuka
+    }
+
+    function closeGpuModal(e) {
+      if (e && e.target && e.target.closest('.gpu-modal-card') && e.target.tagName !== 'BUTTON') {
+        return;
+      }
+      isGpuModalOpen = false;
+      const modal = document.getElementById('modal-gpu-detail');
+      if (modal) {
+        modal.classList.remove('active');
+      }
+      restartPolling(3500); // Kembalikan ke frekuensi normal
+    }
+
+    function restartPolling(intervalMs) {
+      if (gpuPollTimer) clearInterval(gpuPollTimer);
+      gpuPollTimer = setInterval(() => {
+        if (!document.hidden) {
+          fetchGpuStatus();
+        }
+      }, intervalMs);
+    }
+
+    // Keyboard ESC to close GPU modal
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && isGpuModalOpen) {
+        closeGpuModal();
+      }
+    });
+
+    // Initial Poll when document ready
+    document.addEventListener('DOMContentLoaded', function() {
+      fetchGpuStatus();
+      restartPolling(3500);
+    });
+  </script>
+</body>
+</html>

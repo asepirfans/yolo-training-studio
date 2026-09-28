@@ -1,0 +1,1960 @@
+{% extends "base.html" %}
+
+{% block title %}Test Model & Inference | YOLO Training Studio{% endblock %}
+{% block header_title %}Testing & Inference Playground{% endblock %}
+
+{% block content %}
+<style>
+  /* True Single-Page Layout (No Outer Window Scroll) */
+  html, body {
+    height: 100vh !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+  }
+  .app-shell {
+    height: 100vh !important;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow: hidden !important;
+  }
+  .main-wrapper {
+    height: 100vh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+  .main-topbar {
+    display: none !important;
+  }
+  .page-body {
+    flex: 1 !important;
+    min-height: 0 !important;
+    padding: 0.65rem 1.5rem 0.65rem !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+  }
+  #testing-container {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 1rem;
+    overflow: hidden;
+  }
+  @media (max-width: 960px) {
+    html, body, .app-shell, .main-wrapper {
+      overflow-y: auto !important;
+      height: auto !important;
+    }
+    .page-body {
+      overflow: visible !important;
+      height: auto !important;
+      padding: 0.5rem 0.65rem 1.5rem !important;
+    }
+    #testing-container {
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: visible !important;
+      height: auto !important;
+      gap: 0.75rem !important;
+      grid-template-columns: 1fr !important;
+    }
+    #testing-left-col {
+      height: auto !important;
+      min-height: auto !important;
+      overflow: visible !important;
+    }
+    #testing-right-col {
+      height: auto !important;
+      min-height: auto !important;
+      overflow: visible !important;
+    }
+
+    /* Di HP pada mode webcam: Posisikan viewport kamera di ATAS agar langsung terlihat besar & jelas */
+    #testing-container.mode-webcam #testing-right-col {
+      order: 1 !important;
+    }
+    #testing-container.mode-webcam #testing-left-col {
+      order: 2 !important;
+    }
+
+    #webcam-view {
+      height: auto !important;
+      min-height: auto !important;
+      overflow: visible !important;
+    }
+    #webcam-metrics-bar {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 0.35rem !important;
+      margin-bottom: 0.4rem !important;
+    }
+    #webcam-metrics-bar .metric-tile {
+      padding: 0.45rem 0.65rem !important;
+    }
+    #webcam-metrics-bar .metric-tile-label {
+      font-size: 0.6rem !important;
+    }
+    #webcam-metrics-bar .metric-tile-value {
+      font-size: 1.15rem !important;
+    }
+
+    /* Ukuran Kamera Besar & Jelas di HP */
+    #webcam-viewport-card {
+      height: 56vh !important;
+      min-height: 380px !important;
+      max-height: 650px !important;
+      width: 100% !important;
+      flex: none !important;
+      border-radius: var(--radius-md) !important;
+    }
+    #webcam-stage {
+      width: 100% !important;
+      height: 100% !important;
+      min-height: 100% !important;
+    }
+    #webcam-video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .page-body {
+      padding: 0.35rem 0.45rem 1.25rem !important;
+    }
+    #webcam-viewport-card {
+      height: 52vh !important;
+      min-height: 330px !important;
+    }
+  }
+
+  @media (max-width: 960px) and (orientation: landscape) {
+    #webcam-viewport-card {
+      height: 85vh !important;
+      min-height: 280px !important;
+    }
+  }
+</style>
+
+<!-- Compact Topbar -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.55rem; flex-shrink: 0;">
+  <div style="display: flex; align-items: center; gap: 8px;">
+    <h1 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 0;">Model Testing Playground</h1>
+    <span style="font-size: 0.75rem; color: var(--text-muted);">• Batch Inference & Verifikasi Deteksi</span>
+  </div>
+  {% if active_project %}
+    <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: var(--cloud-300); border: 1px solid var(--accent-border); font-size: 0.75rem; padding: 3px 9px;">
+      Project: {{ active_project.name }}
+    </span>
+  {% else %}
+    <span class="badge badge-neutral" style="font-size: 0.75rem; padding: 3px 9px;">
+      Mode Semua Project (Global)
+    </span>
+  {% endif %}
+</div>
+
+<div id="testing-container">
+  
+  <!-- Left Column: Controls & Setup (Inner scrollable if screen is short) -->
+  <div class="card" id="testing-left-col" style="margin-bottom: 0; height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-color: var(--border-card);">
+    <div class="card-header" style="padding: 0.65rem 1rem; flex-shrink: 0;">
+      <div class="card-title" style="font-size: 0.85rem;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Konfigurasi Pengujian
+      </div>
+    </div>
+    
+    <div class="card-body" style="flex: 1; min-height: 0; overflow-y: auto; padding: 0.85rem 1rem;">
+      <form id="inference-form">
+        <!-- 1. Pilih Model -->
+        <div class="form-group" style="margin-bottom: 0.55rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <label class="form-label" for="model_select" style="margin-bottom: 0; font-size: 0.78rem;">Pilih Model Terlatih (best.pt) *</label>
+            {% if active_project %}
+              <span style="font-size: 0.7rem; color: var(--cloud-300);">{{ active_project.name }}</span>
+            {% endif %}
+          </div>
+
+          <select class="form-select" id="model_select" name="model_path" required onchange="checkSelectedModelIsBest()" style="padding: 0.45rem 0.75rem; font-size: 0.8rem;">
+            {% if models %}
+              {% for m in models %}
+                <option value="{{ m.path }}" data-is-best="{{ '1' if m.is_best else '0' }}" {% if (preselected_run_id and (preselected_run_id in m.id)) or loop.first %}selected{% endif %}>
+                  {{ m.name }} {% if not active_project or active_project_id == 'all' %}[{{ m.project_name }}]{% endif %}
+                </option>
+              {% endfor %}
+            {% else %}
+              <option value="" disabled selected>
+                {% if active_project %}
+                  Belum ada model terlatih di project "{{ active_project.name }}"
+                {% else %}
+                  Belum ada model hasil training (best.pt)
+                {% endif %}
+              </option>
+            {% endif %}
+          </select>
+
+          <div id="model-best-hint" style="display: none; margin-top: 5px; padding: 4px 8px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 6px; font-size: 0.72rem; color: #fde047; align-items: center; gap: 5px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            <span>Model ini adalah hasil training dengan performa terbaik di workspace.</span>
+          </div>
+
+          {% if not models %}
+            <div style="margin-top: 5px; padding: 6px 8px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.22); border-radius: 6px; font-size: 0.72rem; color: #fca5a5; display: flex; align-items: center; justify-content: space-between;">
+              <span>Project ini belum ada model.</span>
+              <a href="{{ url_for('training.new_training') }}" style="color: var(--cloud-300); text-decoration: underline; font-weight: 600;">
+                Train model &rarr;
+              </a>
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- 2. Sumber Data Uji -->
+        <div class="form-group" style="margin-bottom: 0.55rem;">
+          <label class="form-label" style="font-size: 0.78rem; margin-bottom: 0.25rem;">Sumber Data Pengujian</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.35rem; margin-bottom: 0.45rem;">
+            <button type="button" id="btn-source-upload" class="btn btn-sm btn-primary" onclick="switchSourceMode('upload')" style="padding: 0.35rem 0.2rem; font-size: 0.71rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Upload
+            </button>
+            <button type="button" id="btn-source-dataset" class="btn btn-sm btn-secondary" onclick="switchSourceMode('dataset')" style="padding: 0.35rem 0.2rem; font-size: 0.71rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+              </svg>
+              Dataset
+            </button>
+            <button type="button" id="btn-source-webcam" class="btn btn-sm btn-secondary" onclick="switchSourceMode('webcam')" style="padding: 0.35rem 0.2rem; font-size: 0.71rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 7l-7 5 7 5V7z"/>
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+              </svg>
+              Webcam
+            </button>
+          </div>
+
+          <!-- Panel A: Upload Manual (File / Folder Gambar & Label) -->
+          <div id="panel-source-upload">
+            <!-- Pilihan Tipe: Langsung Detect vs Dengan Label Pembanding -->
+            <div style="margin-bottom: 0.45rem;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; background: rgba(255, 255, 255, 0.02); padding: 3px; border-radius: 6px; border: 1px solid var(--border-card);">
+                <button type="button" id="btn-manual-direct" class="btn btn-sm btn-primary" onclick="switchManualType('direct')" style="padding: 0.32rem 0.3rem; font-size: 0.72rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                  </svg>
+                  Deteksi Langsung
+                </button>
+                <button type="button" id="btn-manual-verify" class="btn btn-sm btn-secondary" onclick="switchManualType('verify')" style="padding: 0.32rem 0.3rem; font-size: 0.72rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="m9 12 2 2 4-4"/>
+                  </svg>
+                  Bandingkan Label (OK/NG)
+                </button>
+              </div>
+              <div id="manual-type-hint" style="font-size: 0.67rem; color: var(--text-muted); margin-top: 3px; padding: 0 2px;">
+                Mode inferensi murni tanpa evaluasi label.
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; margin-bottom: 0.45rem;">
+              <button type="button" id="btn-mode-file" class="btn btn-sm btn-primary" onclick="switchUploadMode('file')" style="padding: 0.3rem 0.4rem; font-size: 0.72rem;">
+                File Gambar
+              </button>
+              <button type="button" id="btn-mode-folder" class="btn btn-sm btn-secondary" onclick="switchUploadMode('folder')" style="padding: 0.3rem 0.4rem; font-size: 0.72rem;">
+                Folder Gambar
+              </button>
+            </div>
+
+            <!-- Hidden actual inputs -->
+            <input type="file" id="input-files" multiple accept="image/*" style="display: none;" onchange="handleFileSelection(this.files)">
+            <input type="file" id="input-folder" webkitdirectory directory multiple style="display: none;" onchange="handleFileSelection(this.files)">
+            <input type="file" id="input-labels" multiple accept=".txt" style="display: none;" onchange="handleLabelSelection(this.files)">
+
+            <!-- Modern Compact Dropzone -->
+            <div id="dropzone-area" onclick="triggerFileInput()" style="border: 2px dashed var(--border-card); border-radius: var(--radius-sm); padding: 0.75rem 0.65rem; text-align: center; cursor: pointer; background: rgba(255, 255, 255, 0.02); transition: all 0.2s ease;">
+              <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); display: inline-flex; align-items: center; justify-content: center; color: var(--cloud-400); margin-bottom: 0.25rem;">
+                <svg id="dropzone-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <div id="dropzone-title" style="font-weight: 600; font-size: 0.78rem; color: #fff;">Pilih file gambar</div>
+              <div id="dropzone-sub" style="font-size: 0.68rem; color: var(--text-muted); margin-top: 1px;">JPG, PNG, WEBP (bisa banyak)</div>
+              <div id="selected-files-badge" style="display: none; margin-top: 0.35rem;">
+                <span class="badge badge-success" id="selected-files-count" style="font-size: 0.7rem; padding: 2px 7px;">0 file dipilih</span>
+              </div>
+            </div>
+
+            <!-- Ground Truth Label Upload Slot (Hanya tampil saat mode 'verify') -->
+            <div id="slot-label-upload" style="display: none; margin-top: 0.45rem; padding: 0.45rem 0.65rem; background: rgba(56, 189, 248, 0.03); border: 1px dashed var(--accent-border); border-radius: 6px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.72rem; font-weight: 600; color: var(--cloud-300); display: flex; align-items: center; gap: 4px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
+                  Label Pembanding (.txt)
+                </span>
+                <span style="font-size: 0.65rem; color: var(--text-muted);">Format YOLO</span>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('input-labels').click()" style="width: 100%; margin-top: 4px; font-size: 0.72rem; padding: 3px 6px;">
+                Pilih File Label (.txt YOLO)
+              </button>
+              <div id="selected-labels-badge" style="display: none; font-size: 0.68rem; color: var(--success); margin-top: 3px;">
+                <span id="selected-labels-count">0 file label dimuat</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel B: Dari Dataset Studio (Paling Praktis!) -->
+          <div id="panel-source-dataset" style="display: none;">
+            <div style="padding: 0.6rem; background: rgba(56, 189, 248, 0.04); border: 1px solid var(--accent-border); border-radius: 6px;">
+              <div style="margin-bottom: 0.45rem;">
+                <label class="form-label" style="font-size: 0.72rem; margin-bottom: 0.2rem;" for="dataset_select">Pilih Dataset Studio</label>
+                <select class="form-select" id="dataset_select" style="padding: 0.35rem 0.6rem; font-size: 0.75rem;">
+                  {% if datasets %}
+                    {% for ds in datasets %}
+                      <option value="{{ ds.id }}" {% if loop.first %}selected{% endif %}>
+                        {{ ds.name }} ({{ ds.val_count }} val, {{ ds.num_classes }} cls)
+                      </option>
+                    {% endfor %}
+                  {% else %}
+                    <option value="" disabled selected>Belum ada dataset di project</option>
+                  {% endif %}
+                </select>
+              </div>
+
+              <div class="form-grid-2" style="gap: 0.4rem; margin-bottom: 0.35rem;">
+                <div>
+                  <label class="form-label" style="font-size: 0.72rem; margin-bottom: 0.2rem;" for="dataset_split">Split Data</label>
+                  <select class="form-select" id="dataset_split" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;">
+                    <option value="val" selected>Validation (val)</option>
+                    <option value="test">Test (test)</option>
+                    <option value="train">Train (train)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.72rem; margin-bottom: 0.2rem;" for="dataset_limit">Maks. Sampel</label>
+                  <select class="form-select" id="dataset_limit" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;">
+                    <option value="25">25 gambar</option>
+                    <option value="50" selected>50 gambar</option>
+                    <option value="100">100 gambar</option>
+                    <option value="500">Semua</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size: 0.68rem; color: var(--cloud-300); line-height: 1.35; margin-top: 4px;">
+                ✓ Otomatis memuat gambar & label pembanding untuk pengujian akurasi OK vs NG.
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel C: Realtime USB Webcam -->
+          <div id="panel-source-webcam" style="display: none;">
+            <div style="padding: 0.6rem; background: rgba(56, 189, 248, 0.04); border: 1px solid var(--accent-border); border-radius: 6px;">
+              <div style="margin-bottom: 0.45rem;">
+                <label class="form-label" style="font-size: 0.72rem; margin-bottom: 0.2rem;" for="webcam_device_select">Pilih Kamera USB</label>
+                <select class="form-select" id="webcam_device_select" onchange="changeWebcamDevice()" style="padding: 0.35rem 0.6rem; font-size: 0.75rem;">
+                  <option value="">Default Kamera / USB Webcam</option>
+                </select>
+              </div>
+
+              <div class="form-grid-2" style="gap: 0.4rem; margin-bottom: 0.45rem;">
+                <div>
+                  <label class="form-label" style="font-size: 0.72rem; margin-bottom: 0.2rem;" for="webcam_res_select">Resolusi</label>
+                  <select class="form-select" id="webcam_res_select" onchange="restartWebcamStream()" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;">
+                    <option value="640x480" selected>640 x 480 (Cepat)</option>
+                    <option value="1280x720">1280 x 720 (HD)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.72rem; margin-bottom: 0.2rem;" for="webcam_rate_select">Rate Inferensi</label>
+                  <select class="form-select" id="webcam_rate_select" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;">
+                    <option value="5">5 FPS</option>
+                    <option value="10" selected>10 FPS (Stabil)</option>
+                    <option value="15">15 FPS (Cepat)</option>
+                    <option value="0">Maksimum GPU</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.45rem;">
+                <button type="button" id="btn-toggle-camera" class="btn btn-primary btn-sm" onclick="toggleWebcam()" style="font-size: 0.78rem; padding: 0.45rem 0.6rem; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span id="btn-toggle-camera-text">Mulai Kamera Webcam</span>
+                </button>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.35rem;">
+                  <button type="button" id="btn-toggle-detection" class="btn btn-secondary btn-sm" onclick="toggleLiveDetection()" disabled style="font-size: 0.71rem; padding: 0.35rem 0.2rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                    <span id="detection-dot" style="width: 7px; height: 7px; border-radius: 50%; background: #64748b; display: inline-block;"></span>
+                    <span id="btn-toggle-detection-text">Deteksi</span>
+                  </button>
+                  <button type="button" id="btn-webcam-flip" class="btn btn-secondary btn-sm" onclick="flipWebcamCamera()" style="font-size: 0.71rem; padding: 0.35rem 0.2rem; display: flex; align-items: center; justify-content: center; gap: 3px;" title="Ganti Kamera Belakang / Depan">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                    <span id="btn-webcam-flip-text">Flip</span>
+                  </button>
+                  <button type="button" id="btn-webcam-snapshot" class="btn btn-secondary btn-sm" onclick="captureWebcamSnapshot()" disabled style="font-size: 0.71rem; padding: 0.35rem 0.2rem; display: flex; align-items: center; justify-content: center; gap: 3px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                      <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                    Snapshot
+                  </button>
+                </div>
+              </div>
+
+              <div style="font-size: 0.67rem; color: var(--text-muted); line-height: 1.35; margin-top: 6px;">
+                Membaca webcam USB lokal di PC client dan menjalankan deteksi real-time di GPU server.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Parameter Slider -->
+        <div class="form-group" style="margin-bottom: 0.55rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <label class="form-label" style="margin-bottom: 0; font-size: 0.78rem;" for="conf_slider">Confidence Threshold</label>
+            <span id="conf_val" style="font-size: 0.75rem; font-weight: 700; color: var(--cloud-300);">0.25 (25%)</span>
+          </div>
+          <input type="range" class="form-control" id="conf_slider" min="0.05" max="0.95" step="0.05" value="0.25" oninput="updateSliderText('conf', this.value)" style="padding: 0; accent-color: var(--cloud-400); height: 5px;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0.55rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <label class="form-label" style="margin-bottom: 0; font-size: 0.78rem;" for="iou_slider">IoU Match Threshold</label>
+            <span id="iou_val" style="font-size: 0.75rem; font-weight: 700; color: var(--cloud-300);">0.45</span>
+          </div>
+          <input type="range" class="form-control" id="iou_slider" min="0.1" max="0.9" step="0.05" value="0.45" oninput="updateSliderText('iou', this.value)" style="padding: 0; accent-color: var(--cloud-400); height: 5px;">
+        </div>
+
+        <div class="form-grid-2" style="gap: 0.5rem; margin-bottom: 0.55rem;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="imgsz_select" style="font-size: 0.78rem; margin-bottom: 0.25rem;">Image Size</label>
+            <select class="form-select" id="imgsz_select" style="padding: 0.4rem 0.65rem; font-size: 0.78rem;">
+              <option value="640" selected>640 px (Standar)</option>
+              <option value="864">864 px (High-Res)</option>
+              <option value="1024">1024 px (Ultra)</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="device_select" style="font-size: 0.78rem; margin-bottom: 0.25rem;">Device</label>
+            <select class="form-select" id="device_select" style="padding: 0.4rem 0.65rem; font-size: 0.78rem;">
+              {% if gpu.available %}
+                <option value="0" selected>GPU 0 (CUDA)</option>
+                <option value="cpu">CPU Mode</option>
+              {% else %}
+                <option value="cpu" selected>CPU Mode</option>
+              {% endif %}
+            </select>
+          </div>
+        </div>
+
+        <!-- Tombol Jalankan -->
+        <button type="button" id="btn-submit" onclick="executeInference()" class="btn btn-primary" style="width: 100%; margin-top: 0.65rem; padding: 0.6rem; font-size: 0.85rem;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span id="btn-submit-text">Jalankan Pengujian Model</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Right Column: Results & Interactive Output (Full Height Single Page View) -->
+  <div id="testing-right-col" style="height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
+    
+    <!-- Loading State (Centered) -->
+    <div id="loading-state" class="card" style="display: none; height: 100%; text-align: center; flex-direction: column; align-items: center; justify-content: center; padding: 2rem;">
+      <div style="display: inline-block; width: 42px; height: 42px; border: 3px solid rgba(56, 189, 248, 0.2); border-top-color: var(--cloud-400); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 1rem;"></div>
+      <div style="font-weight: 700; color: #fff; font-size: 1.1rem;">Memproses Inferensi & Evaluasi YOLO...</div>
+      <p id="loading-sub" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">Sedang mengeksekusi model dan mencocokkan bounding box.</p>
+    </div>
+
+    <!-- Empty Initial State (Centered) -->
+    <div id="empty-state" class="card" style="display: flex; height: 100%; text-align: center; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; margin-bottom: 0;">
+      <div style="max-width: 460px; margin: 0 auto;">
+        <div style="width: 52px; height: 52px; border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.03); border: 1px dashed var(--border-card); display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); margin-bottom: 1rem;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="22" y1="12" x2="18" y2="12"/>
+            <line x1="6" y1="12" x2="2" y2="12"/>
+            <line x1="12" y1="6" x2="12" y2="2"/>
+            <line x1="12" y1="22" x2="12" y2="18"/>
+          </svg>
+        </div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-white); margin-bottom: 0.5rem;">Belum Ada Hasil Pengujian</h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0;">
+          Pilih model di sebelah kiri, tentukan sumber data (unggah manual atau gunakan dataset studio), lalu klik <strong>Jalankan Pengujian Model</strong> untuk melihat verifikasi status <strong>OK</strong> vs <strong>NG</strong>.
+        </p>
+      </div>
+    </div>
+
+    <!-- Result View Container (100% Height Fill) -->
+    <div id="result-view" style="display: none; height: 100%; min-height: 0; flex: 1; flex-direction: column; overflow: hidden;">
+      
+      <!-- Telemetry Stats Bar -->
+      <div id="metrics-bar" class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.5rem; flex-shrink: 0;">
+        <div class="metric-tile" style="padding: 0.55rem 0.85rem;">
+          <div class="metric-tile-label" style="font-size: 0.65rem;">RATA-RATA LATENCY</div>
+          <div class="metric-tile-value" style="font-size: 1.35rem; color: var(--cloud-300);" id="stat-latency">0 ms</div>
+          <div class="metric-tile-sub" style="font-size: 0.65rem;">Waktu per gambar</div>
+        </div>
+
+        <div class="metric-tile" style="padding: 0.55rem 0.85rem;">
+          <div class="metric-tile-label" style="font-size: 0.65rem;">OBJEK TERDETEKSI</div>
+          <div class="metric-tile-value" style="font-size: 1.35rem; color: var(--cloud-400);" id="stat-detections">0</div>
+          <div class="metric-tile-sub" style="font-size: 0.65rem;">Total bounding box</div>
+        </div>
+
+        <!-- Evaluation / Accuracy Tile -->
+        <div class="metric-tile" id="tile-eval-accuracy" style="padding: 0.55rem 0.85rem;">
+          <div class="metric-tile-label" style="font-size: 0.65rem;" id="eval-label-title">TOTAL GAMBAR</div>
+          <div class="metric-tile-value" style="font-size: 1.35rem;" id="stat-eval-value">0</div>
+          <div class="metric-tile-sub" style="font-size: 0.65rem;" id="stat-eval-sub">Berhasil diproses</div>
+        </div>
+
+        <div class="metric-tile" style="padding: 0.55rem 0.85rem; display: flex; flex-direction: column; justify-content: center;">
+          <a id="btn-download-zip" href="#" class="btn btn-primary btn-sm" style="width: 100%; font-size: 0.74rem; padding: 0.45rem 0.5rem; display: flex; align-items: center; justify-content: center; gap: 5px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Unduh Dataset ZIP
+          </a>
+          <div style="font-size: 0.63rem; color: var(--cloud-300); text-align: center; margin-top: 3px; font-weight: 500;">
+            Image Ori + Labels.txt
+          </div>
+        </div>
+      </div>
+
+      <!-- Class Breakdown Bar -->
+      <div class="card" style="margin-bottom: 0.5rem; flex-shrink: 0; padding: 0.45rem 0.85rem; border-color: var(--border-card);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">Objek per Kelas:</span>
+          <div id="class-breakdown-container" style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Gallery Card Scroll Container (Takes full remaining vertical space) -->
+      <div class="card" style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.75rem 0.85rem; border-color: var(--border-card); margin-bottom: 0; overflow: hidden;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-shrink: 0; gap: 8px; flex-wrap: wrap;">
+          <div style="font-size: 0.85rem; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+              <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+              <circle cx="9" cy="9" r="2"/>
+              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+            </svg>
+            <span>Galeri Gambar Teranotasi</span>
+          </div>
+
+          <!-- Quick Filter Buttons (All, OK, NG) -->
+          <div id="gallery-filter-buttons" style="display: flex; gap: 4px; align-items: center;">
+            <button type="button" id="btn-filter-all" class="btn btn-sm btn-primary" onclick="setGalleryFilter('ALL')" style="padding: 2px 8px; font-size: 0.72rem;">
+              Semua (<span id="count-filter-all">0</span>)
+            </button>
+            <button type="button" id="btn-filter-ok" class="btn btn-sm btn-secondary" onclick="setGalleryFilter('OK')" style="padding: 2px 8px; font-size: 0.72rem; color: #4ade80;">
+              OK (<span id="count-filter-ok">0</span>)
+            </button>
+            <button type="button" id="btn-filter-ng" class="btn btn-sm btn-secondary" onclick="setGalleryFilter('NG')" style="padding: 2px 8px; font-size: 0.72rem; color: #f87171;">
+              NG (<span id="count-filter-ng">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable Cards Container (Only images scroll) -->
+        <div class="gallery-scroll-area" style="flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px;">
+          <div class="gallery-grid" id="gallery-container">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Webcam View Container (100% Height Fill) -->
+    <div id="webcam-view" style="display: none; height: 100%; min-height: 0; flex: 1; flex-direction: column; overflow: hidden;">
+      
+      <!-- Telemetry Stats Bar for Webcam -->
+      <div id="webcam-metrics-bar" class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.5rem; flex-shrink: 0;">
+        <div class="metric-tile" style="padding: 0.55rem 0.85rem;">
+          <div class="metric-tile-label" style="font-size: 0.65rem;">STATUS KAMERA</div>
+          <div class="metric-tile-value" style="font-size: 1.15rem; display: flex; align-items: center; gap: 6px;" id="webcam-status-text">
+            <span id="webcam-status-dot" style="width: 10px; height: 10px; border-radius: 50%; background: #64748b; display: inline-block;"></span>
+            <span id="webcam-status-label" style="font-size: 0.95rem; color: var(--text-muted);">Standby</span>
+          </div>
+          <div class="metric-tile-sub" style="font-size: 0.65rem;" id="webcam-status-sub">Kamera belum dibuka</div>
+        </div>
+
+        <div class="metric-tile" style="padding: 0.55rem 0.85rem;">
+          <div class="metric-tile-label" style="font-size: 0.65rem;">FPS KAMERA</div>
+          <div class="metric-tile-value" style="font-size: 1.35rem; color: var(--cloud-300);" id="webcam-fps-val">0 FPS</div>
+          <div class="metric-tile-sub" style="font-size: 0.65rem;">Client local stream</div>
+        </div>
+
+        <div class="metric-tile" style="padding: 0.55rem 0.85rem;">
+          <div class="metric-tile-label" style="font-size: 0.65rem;">INFERENCE LATENCY</div>
+          <div class="metric-tile-value" style="font-size: 1.35rem; color: #4ade80;" id="webcam-latency-val">0 ms</div>
+          <div class="metric-tile-sub" style="font-size: 0.65rem;" id="webcam-infer-fps">0 infer/sec</div>
+        </div>
+
+        <div class="metric-tile" style="padding: 0.55rem 0.85rem;">
+          <div class="metric-tile-label" style="font-size: 0.65rem;">OBJEK TERDETEKSI</div>
+          <div class="metric-tile-value" style="font-size: 1.35rem; color: #f59e0b;" id="webcam-objects-val">0</div>
+          <div class="metric-tile-sub" style="font-size: 0.65rem;">Realtime bounding box</div>
+        </div>
+      </div>
+
+      <!-- Class Breakdown Bar for Webcam -->
+      <div class="card" style="margin-bottom: 0.5rem; flex-shrink: 0; padding: 0.45rem 0.85rem; border-color: var(--border-card);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">Objek Aktif:</span>
+            <div id="webcam-class-breakdown" style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;">
+              <span style="font-size: 0.72rem; color: var(--text-muted);">Belum ada objek terdeteksi</span>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="captureWebcamSnapshot()" style="padding: 2px 8px; font-size: 0.7rem; display: flex; align-items: center; gap: 4px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Simpan Frame
+          </button>
+        </div>
+      </div>
+
+      <!-- Video & Canvas Viewport Card -->
+      <div class="card" id="webcam-viewport-card" style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.5rem; border-color: var(--border-card); margin-bottom: 0; overflow: hidden; background: #020617; position: relative;">
+        <!-- Insecure Context Warning Box -->
+        <div id="webcam-security-notice" style="display: none; position: absolute; inset: 12px; z-index: 50; background: rgba(15, 23, 42, 0.96); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; padding: 1.5rem; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+          <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); color: #f87171; display: flex; align-items: center; justify-content: center; margin-bottom: 0.75rem;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <h4 style="font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 0.4rem;">Akses Webcam Memerlukan Koneksi Aman (HTTPS)</h4>
+          <p style="font-size: 0.8rem; color: var(--text-secondary); max-width: 520px; line-height: 1.5; margin-bottom: 1rem;">
+            Browser membatasi webcam USB client pada IP jaringan non-HTTPS. Pilih salah satu cara di bawah:
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 0.6rem; text-align: left; max-width: 500px; width: 100%; background: rgba(0,0,0,0.35); padding: 0.75rem 1rem; border-radius: 6px; border: 1px solid var(--border-card); font-size: 0.78rem;">
+            <div>
+              <strong style="color: var(--cloud-300);">Cara 1: Buka lewat HTTPS (Direkomendasikan)</strong>
+              <div style="margin-top: 2px;">
+                Akses studio di: <a id="link-https-switch" href="#" target="_blank" style="color: #38bdf8; text-decoration: underline; font-weight: 600;">(memuat link HTTPS...)</a><br>
+                <span style="color: var(--text-muted); font-size: 0.72rem;">(Jika muncul peringatan SSL, klik Advanced &rarr; Proceed to unsafe)</span>
+              </div>
+            </div>
+            <div style="border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.5rem;">
+              <strong style="color: var(--cloud-300);">Cara 2: Aktifkan Flag di Browser Client</strong>
+              <div style="margin-top: 2px; color: var(--text-secondary);">
+                Buka tab: <code style="color: #fde047;">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, tambahkan origin studio ini (<span id="insecure-origin-code" style="color: #fde047;">http://localhost:5055</span>) lalu klik <strong>Relaunch</strong>.
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="checkWebcamCapabilities()" style="margin-top: 1rem; font-size: 0.75rem;">
+            Periksa Ulang Izin Kamera
+          </button>
+        </div>
+
+        <!-- Standby Placeholder (When Camera is Stopped) -->
+        <div id="webcam-standby-placeholder" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 1.5rem;">
+          <div style="width: 52px; height: 52px; border-radius: var(--radius-md); background: rgba(56, 189, 248, 0.06); border: 1px solid var(--accent-border); display: flex; align-items: center; justify-content: center; color: var(--cloud-400); margin-bottom: 0.85rem;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 7l-7 5 7 5V7z"/>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+            </svg>
+          </div>
+          <h4 style="font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 0.35rem;">Kamera Belum Aktif</h4>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); max-width: 380px; line-height: 1.4; margin-bottom: 0.85rem;">
+            Pilih model yang ingin diuji di panel kiri, lalu klik <strong>Mulai Kamera Webcam</strong> untuk mengaktifkan USB webcam lokal Anda.
+          </p>
+          <button type="button" class="btn btn-primary btn-sm" onclick="toggleWebcam()" style="font-size: 0.78rem; padding: 0.4rem 0.9rem;">
+            Mulai Kamera Sekarang
+          </button>
+        </div>
+
+        <!-- Realtime Video & Canvas Stage -->
+        <div id="webcam-stage" style="display: none; position: relative; width: 100%; height: 100%; overflow: hidden; align-items: center; justify-content: center; background: #000;">
+          <video id="webcam-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: contain; border-radius: 4px; display: block; margin: auto;"></video>
+          <canvas id="webcam-overlay" style="position: absolute; pointer-events: none;"></canvas>
+
+          <!-- Floating Mobile Quick Bar -->
+          <div id="webcam-floating-bar" style="position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; z-index: 25;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="flipWebcamCamera()" title="Ganti Kamera Belakang / Depan" style="padding: 4px 8px; font-size: 0.72rem; background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(6px); border-color: rgba(255,255,255,0.2); color: #fff; display: flex; align-items: center; gap: 4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+              </svg>
+              <span id="floating-flip-text">Flip</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleWebcamFullscreen()" title="Layar Penuh (Fullscreen)" style="padding: 4px 8px; font-size: 0.72rem; background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(6px); border-color: rgba(255,255,255,0.2); color: #fff; display: flex; align-items: center; justify-content: center;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Zoom Image with Lightbox Navigation -->
+<div id="modal-zoom" class="modal-overlay" onclick="closeModal()">
+  <!-- Nav buttons -->
+  <button type="button" class="modal-nav-btn modal-nav-prev" onclick="event.stopPropagation(); navModal(-1)" title="Gambar Sebelumnya (Arrow Left)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  </button>
+  <button type="button" class="modal-nav-btn modal-nav-next" onclick="event.stopPropagation(); navModal(1)" title="Gambar Berikutnya (Arrow Right)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  </button>
+
+  <div class="modal-body" onclick="event.stopPropagation()" style="max-width: 90vw; width: auto; position: relative;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="modal-counter" style="font-size: 0.75rem; font-weight: 600; color: var(--cloud-400); background: rgba(56, 189, 248, 0.1); border: 1px solid var(--accent-border); padding: 2px 10px; border-radius: var(--radius-sm);">
+          Gambar 1 dari 1
+        </span>
+        <span id="modal-verdict-badge" style="display: none;"></span>
+      </div>
+      <span class="modal-close" onclick="closeModal()" title="Tutup (Esc)" style="position: static; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--text-muted);">&times;</span>
+    </div>
+
+    <div style="text-align: center; max-height: 72vh; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+      <img id="modal-img" class="modal-img" src="" alt="Zoom Image" style="max-height: 72vh; max-width: 100%; object-fit: contain; border-radius: 8px;">
+    </div>
+
+    <div id="modal-caption" style="margin-top: 0.75rem; text-align: center; color: var(--text-secondary); font-size: 0.85rem; font-weight: 500;"></div>
+  </div>
+</div>
+
+<style>
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@media (max-width: 960px) {
+  #testing-container { grid-template-columns: 1fr !important; }
+}
+
+/* Modal Nav Buttons */
+.modal-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--border-card);
+  color: #fff;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+.modal-nav-btn:hover {
+  background: var(--cloud-500);
+  border-color: var(--cloud-400);
+  transform: translateY(-50%) scale(1.1);
+}
+.modal-nav-prev { left: 24px; }
+.modal-nav-next { right: 24px; }
+@media (max-width: 640px) {
+  .modal-nav-prev { left: 8px; width: 40px; height: 40px; }
+  .modal-nav-next { right: 8px; width: 40px; height: 40px; }
+}
+
+/* Custom Slim Scrollbar for Gallery */
+.gallery-scroll-area::-webkit-scrollbar {
+  width: 6px;
+}
+.gallery-scroll-area::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+.gallery-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+}
+.gallery-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.45);
+}
+</style>
+
+<script>
+  let currentSourceMode = 'upload'; // 'upload' or 'dataset'
+  let currentManualType = 'direct'; // 'direct' or 'verify'
+  let currentMode = 'file';          // 'file' or 'folder'
+  let selectedFiles = [];
+  let selectedLabelFiles = [];
+  let currentFilter = 'ALL';         // 'ALL', 'OK', 'NG'
+  let currentInferenceResults = [];
+  let filteredResults = [];
+  let currentModalIndex = 0;
+
+  function switchSourceMode(mode) {
+    currentSourceMode = mode;
+    const btnUpload = document.getElementById('btn-source-upload');
+    const btnDataset = document.getElementById('btn-source-dataset');
+    const btnWebcam = document.getElementById('btn-source-webcam');
+    const panelUpload = document.getElementById('panel-source-upload');
+    const panelDataset = document.getElementById('panel-source-dataset');
+    const panelWebcam = document.getElementById('panel-source-webcam');
+
+    const btnSubmit = document.getElementById('btn-submit');
+    const emptyState = document.getElementById('empty-state');
+    const loadingState = document.getElementById('loading-state');
+    const resultView = document.getElementById('result-view');
+    const webcamView = document.getElementById('webcam-view');
+
+    // Reset button active styles
+    if (btnUpload) btnUpload.className = 'btn btn-sm btn-secondary';
+    if (btnDataset) btnDataset.className = 'btn btn-sm btn-secondary';
+    if (btnWebcam) btnWebcam.className = 'btn btn-sm btn-secondary';
+
+    if (panelUpload) panelUpload.style.display = 'none';
+    if (panelDataset) panelDataset.style.display = 'none';
+    if (panelWebcam) panelWebcam.style.display = 'none';
+
+    const container = document.getElementById('testing-container');
+
+    if (mode === 'upload') {
+      if (container) container.classList.remove('mode-webcam');
+      if (btnUpload) btnUpload.className = 'btn btn-sm btn-primary';
+      if (panelUpload) panelUpload.style.display = 'block';
+      if (btnSubmit) btnSubmit.style.display = 'block';
+      if (webcamView) webcamView.style.display = 'none';
+      if (currentInferenceResults.length > 0) {
+        if (resultView) resultView.style.display = 'flex';
+        if (emptyState) emptyState.style.display = 'none';
+      } else {
+        if (emptyState) emptyState.style.display = 'flex';
+        if (resultView) resultView.style.display = 'none';
+      }
+    } else if (mode === 'dataset') {
+      if (container) container.classList.remove('mode-webcam');
+      if (btnDataset) btnDataset.className = 'btn btn-sm btn-primary';
+      if (panelDataset) panelDataset.style.display = 'block';
+      if (btnSubmit) btnSubmit.style.display = 'block';
+      if (webcamView) webcamView.style.display = 'none';
+      if (currentInferenceResults.length > 0) {
+        if (resultView) resultView.style.display = 'flex';
+        if (emptyState) emptyState.style.display = 'none';
+      } else {
+        if (emptyState) emptyState.style.display = 'flex';
+        if (resultView) resultView.style.display = 'none';
+      }
+    } else if (mode === 'webcam') {
+      if (container) container.classList.add('mode-webcam');
+      if (btnWebcam) btnWebcam.className = 'btn btn-sm btn-primary';
+      if (panelWebcam) panelWebcam.style.display = 'block';
+      if (btnSubmit) btnSubmit.style.display = 'none'; // Webcam menggunakan kontrol tombol real-time
+      if (emptyState) emptyState.style.display = 'none';
+      if (loadingState) loadingState.style.display = 'none';
+      if (resultView) resultView.style.display = 'none';
+      if (webcamView) webcamView.style.display = 'flex';
+      checkWebcamCapabilities();
+      setTimeout(syncOverlayCanvasSize, 150);
+    }
+  }
+
+  function switchManualType(type) {
+    currentManualType = type;
+    const btnDirect = document.getElementById('btn-manual-direct');
+    const btnVerify = document.getElementById('btn-manual-verify');
+    const slotLabel = document.getElementById('slot-label-upload');
+    const hintEl = document.getElementById('manual-type-hint');
+
+    if (type === 'direct') {
+      btnDirect.className = 'btn btn-sm btn-primary';
+      btnVerify.className = 'btn btn-sm btn-secondary';
+      slotLabel.style.display = 'none';
+      if (hintEl) hintEl.innerText = 'Mode inferensi murni tanpa evaluasi / pembandingan label.';
+      selectedLabelFiles = [];
+      const lblBadge = document.getElementById('selected-labels-badge');
+      if (lblBadge) lblBadge.style.display = 'none';
+    } else {
+      btnDirect.className = 'btn btn-sm btn-secondary';
+      btnVerify.className = 'btn btn-sm btn-primary';
+      slotLabel.style.display = 'block';
+      if (hintEl) hintEl.innerText = 'Bandingkan deteksi model vs label .txt YOLO (Status OK jika bbox & kelas cocok, NG jika ada perbedaan).';
+    }
+  }
+
+  function switchUploadMode(mode) {
+    currentMode = mode;
+    const btnFile = document.getElementById('btn-mode-file');
+    const btnFolder = document.getElementById('btn-mode-folder');
+    const title = document.getElementById('dropzone-title');
+    const sub = document.getElementById('dropzone-sub');
+
+    if (mode === 'file') {
+      btnFile.className = 'btn btn-sm btn-primary';
+      btnFolder.className = 'btn btn-sm btn-secondary';
+      title.innerText = 'Pilih file gambar';
+      sub.innerText = 'Mendukung JPG, PNG, WEBP (bisa pilih banyak)';
+    } else {
+      btnFile.className = 'btn btn-sm btn-secondary';
+      btnFolder.className = 'btn btn-sm btn-primary';
+      title.innerText = 'Pilih folder gambar';
+      sub.innerText = 'Satu folder penuh gambar (dan file .txt label)';
+    }
+    selectedFiles = [];
+    document.getElementById('selected-files-badge').style.display = 'none';
+  }
+
+  function triggerFileInput() {
+    if (currentMode === 'file') {
+      document.getElementById('input-files').click();
+    } else {
+      document.getElementById('input-folder').click();
+    }
+  }
+
+  function handleFileSelection(files) {
+    if (!files || files.length === 0) return;
+    
+    const validFiles = [];
+    const validExts = ['.jpg', '.jpeg', '.png', '.bmp', '.webp'];
+    const labelExts = ['.txt'];
+    const autoLabels = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const ext = f.name.substring(f.name.lastIndexOf('.')).toLowerCase();
+      if (validExts.includes(ext)) {
+        validFiles.push(f);
+      } else if (labelExts.includes(ext)) {
+        autoLabels.push(f);
+      }
+    }
+
+    selectedFiles = validFiles;
+    if (currentManualType === 'verify' && autoLabels.length > 0) {
+      selectedLabelFiles = autoLabels;
+      const lblBadge = document.getElementById('selected-labels-badge');
+      const lblCount = document.getElementById('selected-labels-count');
+      if (lblBadge && lblCount) {
+        lblBadge.style.display = 'block';
+        lblCount.innerText = `${autoLabels.length} file label otomatis terpasang`;
+      }
+    }
+
+    const badge = document.getElementById('selected-files-badge');
+    const countEl = document.getElementById('selected-files-count');
+
+    if (selectedFiles.length > 0) {
+      badge.style.display = 'block';
+      countEl.innerText = `${selectedFiles.length} file gambar dipilih`;
+      countEl.className = 'badge badge-success';
+    } else {
+      badge.style.display = 'block';
+      countEl.innerText = 'Tidak ada file gambar yang valid';
+      countEl.className = 'badge badge-danger';
+    }
+  }
+
+  function handleLabelSelection(files) {
+    if (!files || files.length === 0) return;
+    const validLabels = [];
+    for (let i = 0; i < files.length; i++) {
+      if (files[i].name.toLowerCase().endsWith('.txt')) {
+        validLabels.push(files[i]);
+      }
+    }
+    selectedLabelFiles = validLabels;
+    const lblBadge = document.getElementById('selected-labels-badge');
+    const lblCount = document.getElementById('selected-labels-count');
+    if (selectedLabelFiles.length > 0) {
+      lblBadge.style.display = 'block';
+      lblCount.innerText = `${selectedLabelFiles.length} file label .txt siap dibandingkan`;
+    }
+  }
+
+  function updateSliderText(type, val) {
+    if (type === 'conf') {
+      const pct = Math.round(val * 100);
+      document.getElementById('conf_val').innerText = `${val} (${pct}%)`;
+    } else if (type === 'iou') {
+      document.getElementById('iou_val').innerText = val;
+    }
+  }
+
+  function executeInference() {
+    const modelPath = document.getElementById('model_select').value;
+    if (!modelPath) {
+      alert('Pilih model yang akan digunakan untuk pengujian!');
+      return;
+    }
+
+    const conf = document.getElementById('conf_slider').value;
+    const iou = document.getElementById('iou_slider').value;
+    const imgsz = document.getElementById('imgsz_select').value;
+    const device = document.getElementById('device_select').value;
+
+    const formData = new FormData();
+    formData.append('model_path', modelPath);
+    formData.append('conf', conf);
+    formData.append('iou', iou);
+    formData.append('imgsz', imgsz);
+    formData.append('device', device);
+    formData.append('source_type', currentSourceMode);
+
+    if (currentSourceMode === 'dataset') {
+      const dsId = document.getElementById('dataset_select').value;
+      if (!dsId) {
+        alert('Pilih dataset yang akan diuji dari Studio!');
+        return;
+      }
+      const split = document.getElementById('dataset_split').value;
+      const limit = document.getElementById('dataset_limit').value;
+      formData.append('dataset_id', dsId);
+      formData.append('split', split);
+      formData.append('limit', limit);
+    } else {
+      formData.append('manual_type', currentManualType);
+      if (!selectedFiles || selectedFiles.length === 0) {
+        alert('Silakan pilih minimal 1 file gambar atau 1 folder gambar terlebih dahulu!');
+        return;
+      }
+      for (let i = 0; i < selectedFiles.length; i++) {
+        formData.append('files', selectedFiles[i]);
+      }
+      if (currentManualType === 'verify') {
+        for (let i = 0; i < selectedLabelFiles.length; i++) {
+          formData.append('label_files', selectedLabelFiles[i]);
+        }
+      }
+    }
+
+    // UI Feedback
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('result-view').style.display = 'none';
+    document.getElementById('loading-state').style.display = 'flex';
+    document.getElementById('loading-sub').innerText = (currentSourceMode === 'dataset') 
+      ? 'Memuat sampel dataset studio dan menjalankan inferensi & evaluasi...' 
+      : `Menjalankan inferensi pada ${selectedFiles.length} gambar...`;
+
+    const btnSubmit = document.getElementById('btn-submit');
+    btnSubmit.disabled = true;
+    document.getElementById('btn-submit-text').innerText = 'Memproses...';
+
+    fetch('/testing/run', {
+      method: 'POST',
+      body: formData
+    })
+    .then(res => res.json())
+    .then(resData => {
+      document.getElementById('loading-state').style.display = 'none';
+      btnSubmit.disabled = false;
+      document.getElementById('btn-submit-text').innerText = 'Jalankan Pengujian Model';
+
+      if (resData.success && resData.data) {
+        renderInferenceResults(resData.data);
+      } else {
+        alert('Gagal menjalankan inferensi: ' + (resData.error || 'Terjadi kesalahan'));
+        document.getElementById('empty-state').style.display = 'flex';
+      }
+    })
+    .catch(err => {
+      document.getElementById('loading-state').style.display = 'none';
+      btnSubmit.disabled = false;
+      document.getElementById('btn-submit-text').innerText = 'Jalankan Pengujian Model';
+      alert('Terjadi kesalahan jaringan: ' + err.message);
+      document.getElementById('empty-state').style.display = 'flex';
+    });
+  }
+
+  function renderInferenceResults(data) {
+    document.getElementById('stat-latency').innerText = `${data.avg_latency_ms} ms`;
+    document.getElementById('stat-detections').innerText = data.total_detections;
+    document.getElementById('btn-download-zip').href = `/testing/download-zip/${data.session_id}`;
+
+    // Update Telemetry Bar with OK / NG Pass Rate if evaluated
+    const evalTitle = document.getElementById('eval-label-title');
+    const evalVal = document.getElementById('stat-eval-value');
+    const evalSub = document.getElementById('stat-eval-sub');
+
+    if (data.has_evaluation && data.evaluation_summary) {
+      const es = data.evaluation_summary;
+      evalTitle.innerText = 'VERIFIKASI AKURASI';
+      evalTitle.style.color = (es.pass_rate >= 80) ? 'var(--success)' : '#f87171';
+      
+      evalVal.innerHTML = `<span style="color: ${es.pass_rate >= 80 ? '#4ade80' : '#f87171'}">${es.pass_rate}%</span>`;
+      evalSub.innerHTML = `<strong style="color: #4ade80;">${es.total_ok} OK</strong> &bull; <strong style="color: #f87171;">${es.total_ng} NG</strong>`;
+    } else {
+      evalTitle.innerText = 'TOTAL GAMBAR';
+      evalTitle.style.color = '';
+      evalVal.innerText = data.total_images;
+      evalSub.innerText = 'Berhasil diproses';
+    }
+
+    // Render Class Breakdown
+    const classContainer = document.getElementById('class-breakdown-container');
+    classContainer.innerHTML = '';
+    const classSummary = data.class_summary || {};
+    const classKeys = Object.keys(classSummary);
+
+    if (classKeys.length === 0) {
+      classContainer.innerHTML = '<span style="color: var(--text-muted); font-size: 0.8rem;">Tidak ada objek yang terdeteksi dengan threshold saat ini.</span>';
+    } else {
+      classKeys.forEach(cls => {
+        const chip = document.createElement('span');
+        chip.className = 'badge badge-running';
+        chip.style.fontSize = '0.78rem';
+        chip.style.padding = '3px 9px';
+        chip.innerHTML = `<strong>${cls}</strong>: ${classSummary[cls]} objek`;
+        classContainer.appendChild(chip);
+      });
+    }
+
+    // Store global results
+    currentInferenceResults = data.results || [];
+
+    // Update Quick Filter Counts
+    const totalAll = currentInferenceResults.length;
+    const totalOk = currentInferenceResults.filter(r => r.evaluation && r.evaluation.verdict === 'OK').length;
+    const totalNg = currentInferenceResults.filter(r => r.evaluation && r.evaluation.verdict === 'NG').length;
+
+    document.getElementById('count-filter-all').innerText = totalAll;
+    document.getElementById('count-filter-ok').innerText = totalOk;
+    document.getElementById('count-filter-ng').innerText = totalNg;
+
+    // Show or hide filter bar depending on evaluation presence
+    const filterBar = document.getElementById('gallery-filter-buttons');
+    if (data.has_evaluation) {
+      filterBar.style.display = 'flex';
+    } else {
+      filterBar.style.display = 'none';
+    }
+
+    setGalleryFilter('ALL');
+    document.getElementById('result-view').style.display = 'flex';
+  }
+
+  function setGalleryFilter(filter) {
+    currentFilter = filter;
+    const btnAll = document.getElementById('btn-filter-all');
+    const btnOk = document.getElementById('btn-filter-ok');
+    const btnNg = document.getElementById('btn-filter-ng');
+
+    btnAll.className = (filter === 'ALL') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    btnOk.className = (filter === 'OK') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    btnNg.className = (filter === 'NG') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+
+    if (filter === 'OK') {
+      filteredResults = currentInferenceResults.filter(r => r.evaluation && r.evaluation.verdict === 'OK');
+    } else if (filter === 'NG') {
+      filteredResults = currentInferenceResults.filter(r => r.evaluation && r.evaluation.verdict === 'NG');
+    } else {
+      filteredResults = currentInferenceResults;
+    }
+
+    renderGalleryGrid();
+  }
+
+  function renderGalleryGrid() {
+    const gallery = document.getElementById('gallery-container');
+    gallery.innerHTML = '';
+
+    if (!filteredResults || filteredResults.length === 0) {
+      gallery.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 2.5rem; color: var(--text-muted); font-size: 0.85rem;">Tidak ada gambar yang cocok dengan filter saat ini.</div>';
+      return;
+    }
+
+    filteredResults.forEach((item) => {
+      // Find original index in currentInferenceResults
+      const origIdx = currentInferenceResults.indexOf(item);
+      const card = document.createElement('div');
+      card.className = 'gallery-card';
+
+      // Build Verdict Badge (OK vs NG)
+      let verdictBadge = '';
+      if (item.has_evaluation && item.evaluation) {
+        const v = item.evaluation.verdict;
+        if (v === 'OK') {
+          verdictBadge = `<span class="badge badge-success" style="font-size: 0.75rem; font-weight: 800; padding: 3px 8px; letter-spacing: 0.05em; box-shadow: 0 2px 8px rgba(0,0,0,0.6);">OK</span>`;
+        } else {
+          verdictBadge = `<span class="badge badge-danger" style="font-size: 0.75rem; font-weight: 800; padding: 3px 8px; letter-spacing: 0.05em; box-shadow: 0 2px 8px rgba(0,0,0,0.6);">NG</span>`;
+        }
+      }
+
+      // Build Detections list chips
+      let detBadges = '';
+      if (item.detections && item.detections.length > 0) {
+        detBadges = item.detections.slice(0, 3).map(d => 
+          `<span style="font-size: 0.7rem; background: rgba(56, 189, 248, 0.1); color: var(--cloud-300); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--accent-border);">${d.class_name} (${d.confidence}%)</span>`
+        ).join(' ');
+        if (item.detections.length > 3) {
+          detBadges += ` <span style="font-size: 0.7rem; color: var(--text-muted);">+${item.detections.length - 3}</span>`;
+        }
+      } else {
+        detBadges = '<span style="font-size: 0.7rem; color: var(--text-muted);">Tidak ada objek</span>';
+      }
+
+      // Evaluation detail footer
+      let evalFooter = '';
+      if (item.has_evaluation && item.evaluation) {
+        const isOk = (item.evaluation.verdict === 'OK');
+        evalFooter = `
+          <div style="font-size: 0.72rem; padding: 3px 7px; border-radius: 4px; background: ${isOk ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.1)'}; border: 1px solid ${isOk ? 'rgba(34, 197, 94, 0.25)' : 'rgba(239, 68, 68, 0.3)'}; margin-top: 3px; line-height: 1.3;">
+            <div style="font-weight: 700; color: ${isOk ? '#86efac' : '#fca5a5'}; display: flex; justify-content: space-between;">
+              <span>${item.evaluation.verdict}: ${isOk ? 'Sesuai Label' : 'Ada Ketidakcocokan'}</span>
+              <span>GT: ${item.evaluation.gt_count} | Pred: ${item.evaluation.pred_count}</span>
+            </div>
+            <div style="font-size: 0.67rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.evaluation.detail}</div>
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div style="position: relative; cursor: pointer;" onclick="openModalByIndex(${origIdx})">
+          <img class="gallery-img" src="${item.annotated_url}" alt="${item.original_filename}" loading="lazy">
+          <div style="position: absolute; top: 8px; left: 8px;">
+            ${verdictBadge}
+          </div>
+          <div style="position: absolute; top: 8px; right: 8px;">
+            <span class="badge ${item.detection_count > 0 ? 'badge-success' : 'badge-neutral'}">
+              ${item.detection_count} objek
+            </span>
+          </div>
+        </div>
+        <div class="gallery-footer" style="display: flex; flex-direction: column; gap: 4px; padding: 0.55rem 0.75rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #fff; font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;" title="${item.original_filename}">${item.original_filename}</strong>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">${item.speed_ms} ms</span>
+          </div>
+          <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 1px;">
+            ${detBadges}
+          </div>
+          ${evalFooter}
+        </div>
+      `;
+      gallery.appendChild(card);
+    });
+  }
+
+  function openModalByIndex(idx) {
+    if (!currentInferenceResults || currentInferenceResults.length === 0) return;
+    if (idx < 0) idx = currentInferenceResults.length - 1;
+    if (idx >= currentInferenceResults.length) idx = 0;
+    currentModalIndex = idx;
+
+    const item = currentInferenceResults[currentModalIndex];
+    const modal = document.getElementById('modal-zoom');
+    document.getElementById('modal-img').src = item.annotated_url;
+
+    // Verdict Badge in modal
+    const vBadge = document.getElementById('modal-verdict-badge');
+    if (item.has_evaluation && item.evaluation) {
+      vBadge.style.display = 'inline-block';
+      const isOk = (item.evaluation.verdict === 'OK');
+      vBadge.className = isOk ? 'badge badge-success' : 'badge badge-danger';
+      vBadge.style.fontSize = '0.8rem';
+      vBadge.style.fontWeight = '800';
+      vBadge.innerText = `STATUS: ${item.evaluation.verdict}`;
+    } else {
+      vBadge.style.display = 'none';
+    }
+
+    let captionText = `<strong>${item.original_filename}</strong> &bull; ${item.detection_count} objek terdeteksi (${item.speed_ms} ms)`;
+    if (item.has_evaluation && item.evaluation) {
+      captionText += `<br><span style="font-size: 0.8rem; color: ${item.evaluation.verdict === 'OK' ? '#86efac' : '#fca5a5'};">${item.evaluation.detail} (GT: ${item.evaluation.gt_count} &bull; Pred: ${item.evaluation.pred_count})</span>`;
+    }
+    document.getElementById('modal-caption').innerHTML = captionText;
+    document.getElementById('modal-counter').innerText = `Gambar ${currentModalIndex + 1} dari ${currentInferenceResults.length}`;
+
+    modal.classList.add('active');
+  }
+
+  function navModal(direction) {
+    openModalByIndex(currentModalIndex + direction);
+  }
+
+  function closeModal() {
+    document.getElementById('modal-zoom').classList.remove('active');
+  }
+
+  // Keyboard navigation
+  document.addEventListener('keydown', function(e) {
+    const modal = document.getElementById('modal-zoom');
+    if (modal.classList.contains('active')) {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navModal(-1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navModal(1);
+      } else if (e.key === 'Escape') {
+        closeModal();
+      }
+    }
+  });
+
+  // ==========================================
+  // Realtime USB Webcam Implementation
+  // ==========================================
+  let webcamStream = null;
+  let isWebcamRunning = false;
+  let isDetectionActive = false;
+  let isInferencing = false;
+  let webcamVideoEl = null;
+  let webcamOverlayEl = null;
+  let webcamOverlayCtx = null;
+  let offscreenCanvas = null;
+  let offscreenCtx = null;
+
+  let webcamFrameCount = 0;
+  let lastWebcamFpsTime = performance.now();
+  let webcamFpsInterval = null;
+
+  let inferCount = 0;
+  let lastInferTime = performance.now();
+  let inferFpsInterval = null;
+
+  let detectionLoopTimer = null;
+
+  function initWebcamElements() {
+    if (!webcamVideoEl) {
+      webcamVideoEl = document.getElementById('webcam-video');
+      webcamOverlayEl = document.getElementById('webcam-overlay');
+      if (webcamOverlayEl) {
+        webcamOverlayCtx = webcamOverlayEl.getContext('2d');
+      }
+      offscreenCanvas = document.createElement('canvas');
+      offscreenCtx = offscreenCanvas.getContext('2d');
+    }
+  }
+
+  function checkWebcamCapabilities() {
+    const noticeEl = document.getElementById('webcam-security-notice');
+    const standbyEl = document.getElementById('webcam-standby-placeholder');
+    
+    // Check if getUserMedia is supported
+    const hasMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    
+    // Perbarui link https & origin sesuai host saat ini jika perlu
+    const currentHost = window.location.hostname || 'localhost';
+    const currentPort = window.location.port || '5055';
+    const httpsLink = document.getElementById('link-https-switch');
+    if (httpsLink) {
+      httpsLink.href = `https://${currentHost}:${currentPort}/testing`;
+      httpsLink.innerText = `https://${currentHost}:${currentPort}/testing`;
+    }
+    const originCode = document.getElementById('insecure-origin-code');
+    if (originCode) {
+      originCode.innerText = `${window.location.protocol}//${currentHost}:${currentPort}`;
+    }
+
+    if (!hasMedia) {
+      if (noticeEl) noticeEl.style.display = 'flex';
+      if (standbyEl) standbyEl.style.display = 'none';
+      return false;
+    } else {
+      if (noticeEl) noticeEl.style.display = 'none';
+      if (standbyEl && !isWebcamRunning) standbyEl.style.display = 'flex';
+      loadWebcamDevices();
+      return true;
+    }
+  }
+
+  async function loadWebcamDevices() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(d => d.kind === 'videoinput');
+      const selectEl = document.getElementById('webcam_device_select');
+      if (!selectEl) return;
+
+      const currentVal = selectEl.value;
+      selectEl.innerHTML = '';
+
+      if (videoDevices.length === 0) {
+        selectEl.innerHTML = '<option value="">Default USB Webcam</option>';
+      } else {
+        videoDevices.forEach((dev, idx) => {
+          const opt = document.createElement('option');
+          opt.value = dev.deviceId;
+          opt.text = dev.label || `Kamera USB #${idx + 1}`;
+          if (dev.deviceId === currentVal) opt.selected = true;
+          selectEl.appendChild(opt);
+        });
+      }
+    } catch (e) {
+      console.warn('[Webcam] Enumerate devices:', e);
+    }
+  }
+
+  async function toggleWebcam() {
+    initWebcamElements();
+    if (isWebcamRunning) {
+      stopWebcam();
+    } else {
+      await startWebcam();
+    }
+  }
+
+  let currentFacingMode = 'environment'; // Default ke kamera belakang di HP
+
+  async function flipWebcamCamera() {
+    currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+    const flipText = document.getElementById('btn-webcam-flip-text');
+    const floatFlipText = document.getElementById('floating-flip-text');
+    const label = (currentFacingMode === 'environment') ? 'Belakang' : 'Depan';
+    if (flipText) flipText.innerText = `Flip (${label})`;
+    if (floatFlipText) floatFlipText.innerText = (currentFacingMode === 'environment') ? 'Belakang' : 'Depan';
+
+    // Reset selected device ID agar browser memilih device sesuai facingMode
+    const deviceSelect = document.getElementById('webcam_device_select');
+    if (deviceSelect) deviceSelect.value = '';
+
+    if (isWebcamRunning) {
+      await restartWebcamStream();
+    }
+  }
+
+  function toggleWebcamFullscreen() {
+    const card = document.getElementById('webcam-viewport-card');
+    if (!card) return;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (card.requestFullscreen) card.requestFullscreen();
+      else if (card.webkitRequestFullscreen) card.webkitRequestFullscreen();
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    setTimeout(syncOverlayCanvasSize, 120);
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    setTimeout(syncOverlayCanvasSize, 120);
+  });
+
+  async function startWebcam() {
+    initWebcamElements();
+    const noticeEl = document.getElementById('webcam-security-notice');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (noticeEl) noticeEl.style.display = 'flex';
+      return;
+    }
+
+    const deviceSelect = document.getElementById('webcam_device_select');
+    const resSelect = document.getElementById('webcam_res_select');
+    const deviceId = deviceSelect ? deviceSelect.value : '';
+    const resVal = resSelect ? resSelect.value : '640x480';
+    const [reqW, reqH] = resVal.split('x').map(Number);
+
+    const constraints = {
+      video: {
+        width: { ideal: reqW || 1280 },
+        height: { ideal: reqH || 720 },
+        facingMode: deviceId ? undefined : { ideal: currentFacingMode }
+      },
+      audio: false
+    };
+
+    if (deviceId) {
+      constraints.video.deviceId = { exact: deviceId };
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      webcamStream = stream;
+      isWebcamRunning = true;
+      webcamVideoEl.srcObject = stream;
+
+      document.getElementById('webcam-standby-placeholder').style.display = 'none';
+      document.getElementById('webcam-stage').style.display = 'flex';
+      document.getElementById('webcam-status-dot').style.background = '#22c55e';
+      document.getElementById('webcam-status-label').innerText = 'Online (Live)';
+      document.getElementById('webcam-status-label').style.color = '#4ade80';
+      document.getElementById('webcam-status-sub').innerText = 'Webcam USB / HP Aktif';
+
+      const btnCamera = document.getElementById('btn-toggle-camera');
+      const btnCameraText = document.getElementById('btn-toggle-camera-text');
+      if (btnCamera) btnCamera.className = 'btn btn-danger btn-sm';
+      if (btnCameraText) btnCameraText.innerText = 'Hentikan Kamera';
+
+      document.getElementById('btn-toggle-detection').disabled = false;
+      document.getElementById('btn-webcam-snapshot').disabled = false;
+
+      webcamVideoEl.onloadedmetadata = () => {
+        webcamVideoEl.play();
+        syncOverlayCanvasSize();
+        loadWebcamDevices();
+      };
+
+      startWebcamFpsCounter();
+
+      if (!isDetectionActive) {
+        toggleLiveDetection();
+      }
+
+    } catch (err) {
+      console.error('[Webcam] Gagal membuka kamera:', err);
+      alert('Gagal mengakses kamera: ' + (err.message || err.name));
+    }
+  }
+
+  function stopWebcam() {
+    if (isDetectionActive) {
+      toggleLiveDetection();
+    }
+
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(t => t.stop());
+      webcamStream = null;
+    }
+
+    if (webcamVideoEl) {
+      webcamVideoEl.srcObject = null;
+    }
+
+    isWebcamRunning = false;
+    stopWebcamFpsCounter();
+
+    document.getElementById('webcam-standby-placeholder').style.display = 'flex';
+    document.getElementById('webcam-stage').style.display = 'none';
+    document.getElementById('webcam-status-dot').style.background = '#64748b';
+    document.getElementById('webcam-status-label').innerText = 'Standby';
+    document.getElementById('webcam-status-label').style.color = 'var(--text-muted)';
+    document.getElementById('webcam-status-sub').innerText = 'Kamera dihentikan';
+    document.getElementById('webcam-fps-val').innerText = '0 FPS';
+    document.getElementById('webcam-latency-val').innerText = '0 ms';
+    document.getElementById('webcam-infer-fps').innerText = '0 infer/sec';
+    document.getElementById('webcam-objects-val').innerText = '0';
+
+    const btnCamera = document.getElementById('btn-toggle-camera');
+    const btnCameraText = document.getElementById('btn-toggle-camera-text');
+    if (btnCamera) btnCamera.className = 'btn btn-primary btn-sm';
+    if (btnCameraText) btnCameraText.innerText = 'Mulai Kamera Webcam';
+
+    document.getElementById('btn-toggle-detection').disabled = true;
+    document.getElementById('btn-webcam-snapshot').disabled = true;
+
+    if (webcamOverlayCtx && webcamOverlayEl) {
+      webcamOverlayCtx.clearRect(0, 0, webcamOverlayEl.width, webcamOverlayEl.height);
+    }
+  }
+
+  function changeWebcamDevice() {
+    if (isWebcamRunning) {
+      restartWebcamStream();
+    }
+  }
+
+  async function restartWebcamStream() {
+    if (!isWebcamRunning) return;
+    const wasDetecting = isDetectionActive;
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(t => t.stop());
+      webcamStream = null;
+    }
+    await startWebcam();
+    if (wasDetecting && !isDetectionActive) {
+      toggleLiveDetection();
+    }
+  }
+
+  function syncOverlayCanvasSize() {
+    if (!webcamVideoEl || !webcamOverlayEl) return;
+    const vw = webcamVideoEl.videoWidth || 640;
+    const vh = webcamVideoEl.videoHeight || 480;
+    const clientW = webcamVideoEl.clientWidth;
+    const clientH = webcamVideoEl.clientHeight;
+
+    if (!clientW || !clientH) return;
+
+    // Hitung posisi render presisi dari object-fit: contain (letterbox / pillarbox)
+    const videoRatio = vw / vh;
+    const elementRatio = clientW / clientH;
+
+    let renderW, renderH, renderTop, renderLeft;
+    if (elementRatio > videoRatio) {
+      // Pillarbox (bar hitam kiri & kanan)
+      renderH = clientH;
+      renderW = renderH * videoRatio;
+      renderTop = webcamVideoEl.offsetTop;
+      renderLeft = webcamVideoEl.offsetLeft + (clientW - renderW) / 2;
+    } else {
+      // Letterbox (bar hitam atas & bawah)
+      renderW = clientW;
+      renderH = renderW / videoRatio;
+      renderLeft = webcamVideoEl.offsetLeft;
+      renderTop = webcamVideoEl.offsetTop + (clientH - renderH) / 2;
+    }
+
+    webcamOverlayEl.width = vw;
+    webcamOverlayEl.height = vh;
+
+    webcamOverlayEl.style.width = `${Math.round(renderW)}px`;
+    webcamOverlayEl.style.height = `${Math.round(renderH)}px`;
+    webcamOverlayEl.style.top = `${Math.round(renderTop)}px`;
+    webcamOverlayEl.style.left = `${Math.round(renderLeft)}px`;
+  }
+
+  window.addEventListener('resize', () => {
+    if (isWebcamRunning) {
+      syncOverlayCanvasSize();
+    }
+  });
+
+  function startWebcamFpsCounter() {
+    webcamFrameCount = 0;
+    lastWebcamFpsTime = performance.now();
+    
+    if (webcamVideoEl && 'requestVideoFrameCallback' in webcamVideoEl) {
+      const onFrame = () => {
+        if (!isWebcamRunning) return;
+        webcamFrameCount++;
+        webcamVideoEl.requestVideoFrameCallback(onFrame);
+      };
+      webcamVideoEl.requestVideoFrameCallback(onFrame);
+    }
+
+    webcamFpsInterval = setInterval(() => {
+      const now = performance.now();
+      const elapsed = (now - lastWebcamFpsTime) / 1000;
+      const fps = Math.round(webcamFrameCount / elapsed);
+      const el = document.getElementById('webcam-fps-val');
+      if (el) el.innerText = `${fps || (isWebcamRunning ? 30 : 0)} FPS`;
+      webcamFrameCount = 0;
+      lastWebcamFpsTime = now;
+    }, 1000);
+  }
+
+  function stopWebcamFpsCounter() {
+    if (webcamFpsInterval) {
+      clearInterval(webcamFpsInterval);
+      webcamFpsInterval = null;
+    }
+    if (inferFpsInterval) {
+      clearInterval(inferFpsInterval);
+      inferFpsInterval = null;
+    }
+  }
+
+  function toggleLiveDetection() {
+    isDetectionActive = !isDetectionActive;
+    const dot = document.getElementById('detection-dot');
+    const text = document.getElementById('btn-toggle-detection-text');
+    const btn = document.getElementById('btn-toggle-detection');
+
+    if (isDetectionActive) {
+      if (dot) dot.style.background = '#22c55e';
+      if (text) text.innerText = 'Deteksi: ON';
+      if (btn) btn.className = 'btn btn-primary btn-sm';
+      inferCount = 0;
+      lastInferTime = performance.now();
+      startInferFpsCounter();
+      scheduleNextInferenceFrame();
+    } else {
+      if (dot) dot.style.background = '#64748b';
+      if (text) text.innerText = 'Deteksi: OFF';
+      if (btn) btn.className = 'btn btn-secondary btn-sm';
+      if (detectionLoopTimer) {
+        clearTimeout(detectionLoopTimer);
+        detectionLoopTimer = null;
+      }
+      if (inferFpsInterval) {
+        clearInterval(inferFpsInterval);
+        inferFpsInterval = null;
+      }
+      if (webcamOverlayCtx && webcamOverlayEl) {
+        webcamOverlayCtx.clearRect(0, 0, webcamOverlayEl.width, webcamOverlayEl.height);
+      }
+      document.getElementById('webcam-objects-val').innerText = '0';
+      updateWebcamClassesSummary({});
+    }
+  }
+
+  function startInferFpsCounter() {
+    inferFpsInterval = setInterval(() => {
+      const now = performance.now();
+      const elapsed = (now - lastInferTime) / 1000;
+      const fps = (inferCount / elapsed).toFixed(1);
+      const el = document.getElementById('webcam-infer-fps');
+      if (el) el.innerText = `${fps} infer/sec`;
+      inferCount = 0;
+      lastInferTime = now;
+    }, 1000);
+  }
+
+  function scheduleNextInferenceFrame() {
+    if (!isDetectionActive || !isWebcamRunning) return;
+
+    const rateSelect = document.getElementById('webcam_rate_select');
+    const targetFps = rateSelect ? parseInt(rateSelect.value) : 10;
+    
+    let delay = 100; // default 10 FPS
+    if (targetFps === 5) delay = 200;
+    else if (targetFps === 10) delay = 100;
+    else if (targetFps === 15) delay = 66;
+    else if (targetFps === 0) delay = 10;
+
+    detectionLoopTimer = setTimeout(() => {
+      runWebcamInferenceStep();
+    }, delay);
+  }
+
+  async function runWebcamInferenceStep() {
+    if (!isDetectionActive || !isWebcamRunning) return;
+    if (isInferencing) {
+      scheduleNextInferenceFrame();
+      return;
+    }
+
+    if (!webcamVideoEl || webcamVideoEl.readyState < 2) {
+      scheduleNextInferenceFrame();
+      return;
+    }
+
+    const modelPath = document.getElementById('model_select').value;
+    if (!modelPath) {
+      scheduleNextInferenceFrame();
+      return;
+    }
+
+    isInferencing = true;
+
+    try {
+      const vw = webcamVideoEl.videoWidth || 640;
+      const vh = webcamVideoEl.videoHeight || 480;
+
+      const scale = Math.min(1.0, 640 / Math.max(vw, vh));
+      const targetW = Math.round(vw * scale);
+      const targetH = Math.round(vh * scale);
+
+      offscreenCanvas.width = targetW;
+      offscreenCanvas.height = targetH;
+      offscreenCtx.drawImage(webcamVideoEl, 0, 0, targetW, targetH);
+
+      const blob = await new Promise(resolve => offscreenCanvas.toBlob(resolve, 'image/jpeg', 0.70));
+      if (!blob) {
+        isInferencing = false;
+        scheduleNextInferenceFrame();
+        return;
+      }
+
+      const conf = document.getElementById('conf_slider').value;
+      const iou = document.getElementById('iou_slider').value;
+      const imgsz = document.getElementById('imgsz_select').value;
+      const device = document.getElementById('device_select').value;
+
+      const formData = new FormData();
+      formData.append('model_path', modelPath);
+      formData.append('conf', conf);
+      formData.append('iou', iou);
+      formData.append('imgsz', imgsz);
+      formData.append('device', device);
+      formData.append('frame', blob, 'frame.jpg');
+
+      const resp = await fetch('/testing/live_predict', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success) {
+          inferCount++;
+          drawLiveDetections(data.detections, targetW, targetH, vw, vh);
+
+          document.getElementById('webcam-latency-val').innerText = `${data.latency_ms} ms`;
+          document.getElementById('webcam-objects-val').innerText = data.total_detections;
+          updateWebcamClassesSummary(data.counts);
+        }
+      }
+    } catch (err) {
+      console.warn('[Webcam Inference] Frame error:', err);
+    } finally {
+      isInferencing = false;
+      scheduleNextInferenceFrame();
+    }
+  }
+
+  function drawLiveDetections(detections, frameW, frameH, origW, origH) {
+    if (!webcamOverlayCtx || !webcamOverlayEl) return;
+    syncOverlayCanvasSize();
+
+    const ctx = webcamOverlayCtx;
+    const canvasW = webcamOverlayEl.width;
+    const canvasH = webcamOverlayEl.height;
+
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    if (!detections || detections.length === 0) return;
+
+    const scaleX = canvasW / frameW;
+    const scaleY = canvasH / frameH;
+
+    const classColors = [
+      '#38bdf8', '#4ade80', '#f59e0b', '#ec4899', '#a855f7',
+      '#06b6d4', '#10b981', '#f97316', '#eab308', '#6366f1'
+    ];
+
+    detections.forEach(det => {
+      const [bx1, by1, bx2, by2] = det.box;
+      const x1 = bx1 * scaleX;
+      const y1 = by1 * scaleY;
+      const x2 = bx2 * scaleX;
+      const y2 = by2 * scaleY;
+      const bw = x2 - x1;
+      const bh = y2 - y1;
+
+      const color = classColors[det.class_id % classColors.length] || '#38bdf8';
+
+      // Bounding Box Utama
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x1, y1, bw, bh);
+
+      // Corner Brackets
+      const cLen = Math.min(14, bw / 4, bh / 4);
+      ctx.lineWidth = 3;
+      // Top-Left
+      ctx.beginPath();
+      ctx.moveTo(x1, y1 + cLen);
+      ctx.lineTo(x1, y1);
+      ctx.lineTo(x1 + cLen, y1);
+      ctx.stroke();
+      // Top-Right
+      ctx.beginPath();
+      ctx.moveTo(x2 - cLen, y1);
+      ctx.lineTo(x2, y1);
+      ctx.lineTo(x2, y1 + cLen);
+      ctx.stroke();
+      // Bottom-Left
+      ctx.beginPath();
+      ctx.moveTo(x1, y2 - cLen);
+      ctx.lineTo(x1, y2);
+      ctx.lineTo(x1 + cLen, y2);
+      ctx.stroke();
+      // Bottom-Right
+      ctx.beginPath();
+      ctx.moveTo(x2 - cLen, y2);
+      ctx.lineTo(x2, y2);
+      ctx.lineTo(x2, y2 - cLen);
+      ctx.stroke();
+
+      // Label Tag
+      const confPct = Math.round(det.conf * 100);
+      const labelText = `${det.class_name} ${confPct}%`;
+      ctx.font = 'bold 12px Inter, system-ui, sans-serif';
+      const textMetrics = ctx.measureText(labelText);
+      const textW = textMetrics.width;
+      const textH = 16;
+      const padX = 6;
+      const padY = 3;
+
+      let tagY = y1 - textH - (padY * 2);
+      if (tagY < 0) tagY = y1 + 2;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      ctx.fillRect(x1, tagY, textW + (padX * 2), textH + (padY * 2));
+      
+      ctx.fillStyle = color;
+      ctx.fillRect(x1, tagY, 3, textH + (padY * 2));
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(labelText, x1 + padX + 2, tagY + textH - 1);
+    });
+  }
+
+  function updateWebcamClassesSummary(counts) {
+    const container = document.getElementById('webcam-class-breakdown');
+    if (!container) return;
+
+    if (!counts || Object.keys(counts).length === 0) {
+      container.innerHTML = '<span style="font-size: 0.72rem; color: var(--text-muted);">Tidak ada objek aktif</span>';
+      return;
+    }
+
+    let html = '';
+    for (const [cls, cnt] of Object.entries(counts)) {
+      html += `
+        <span class="badge" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.72rem; padding: 2px 7px;">
+          ${cls}: <strong>${cnt}</strong>
+        </span>
+      `;
+    }
+    container.innerHTML = html;
+  }
+
+  function captureWebcamSnapshot() {
+    if (!webcamVideoEl || !isWebcamRunning) return;
+
+    const vw = webcamVideoEl.videoWidth || 640;
+    const vh = webcamVideoEl.videoHeight || 480;
+
+    const snapCanvas = document.createElement('canvas');
+    snapCanvas.width = vw;
+    snapCanvas.height = vh;
+    const sCtx = snapCanvas.getContext('2d');
+
+    sCtx.drawImage(webcamVideoEl, 0, 0, vw, vh);
+
+    if (webcamOverlayEl) {
+      sCtx.drawImage(webcamOverlayEl, 0, 0, vw, vh);
+    }
+
+    const link = document.createElement('a');
+    const nowStr = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+    link.download = `snapshot_webcam_${nowStr}.jpg`;
+    link.href = snapCanvas.toDataURL('image/jpeg', 0.95);
+    link.click();
+  }
+
+  // Check if selected model is the best one
+  function checkSelectedModelIsBest() {
+    const sel = document.getElementById('model_select');
+    const hint = document.getElementById('model-best-hint');
+    if (!sel || !hint) return;
+    const opt = sel.options[sel.selectedIndex];
+    if (opt && opt.getAttribute('data-is-best') === '1') {
+      hint.style.display = 'flex';
+    } else {
+      hint.style.display = 'none';
+    }
+  }
+
+  // Trigger on load
+  document.addEventListener('DOMContentLoaded', function() {
+    checkSelectedModelIsBest();
+  });
+</script>
+{% endblock %}

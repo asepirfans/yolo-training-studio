@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | YOLO Training Studio{% endblock %}
+{% block header_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+<!-- Hero Header & Quick Actions -->
+<div class="page-hero">
+  <div>
+    <h1 class="page-hero-title">Overview</h1>
+    <p class="page-hero-sub">Pantau komputasi hardware GPU/CPU dan alur kerja pelatihan model YOLO secara real-time.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <a href="{{ url_for('datasets.upload_page') }}" class="btn btn-secondary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      Upload Dataset ZIP
+    </a>
+    <a href="{{ url_for('training.new_training') }}" class="btn btn-primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      New Training
+    </a>
+  </div>
+</div>
+
+<!-- Active Training Alert Banner (If Any Run is Active) -->
+{% if active_run %}
+<div class="card" style="border-color: var(--accent-border); background: linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(15, 23, 42, 0.8) 100%); margin-bottom: 2rem;">
+  <div class="card-body" style="display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; flex-wrap: wrap; padding: 1.25rem 1.5rem;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem;">
+        <span class="badge badge-running">
+          <span class="live-dot" style="width: 6px; height: 6px;"></span>
+          Sedang Training
+        </span>
+        <strong style="font-size: 1.05rem; color: #fff;">{{ active_run.id }}</strong>
+      </div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary);">
+        Model: <strong style="color: var(--cloud-200);">{{ active_run.model_name }}</strong> | 
+        Dataset: <strong style="color: #fff;">{{ active_run.dataset.name if active_run.dataset else '-' }}</strong> | 
+        Epoch: <strong style="color: #fff;">{{ active_run.current_epoch }} / {{ active_run.total_epochs }}</strong>
+      </div>
+    </div>
+    <a href="{{ url_for('training.monitor', run_id=active_run.id) }}" class="btn btn-primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 12h5l2 8 5-16 2 8h6"/>
+      </svg>
+      Buka Live Monitor
+    </a>
+  </div>
+</div>
+{% endif %}
+
+<!-- System Vitals (Hardware Telemetry Grid) -->
+<div class="metrics-grid">
+  <!-- GPU Utilization -->
+  <div class="metric-tile">
+    <div class="metric-tile-header">
+      <span class="metric-tile-label">GPU UTILIZATION</span>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span class="badge badge-success" style="padding: 2px 7px; font-size: 0.7rem;"><span class="live-dot"></span> LIVE</span>
+        <div class="metric-tile-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="4" width="16" height="16" rx="2"/>
+            <rect x="8" y="8" width="8" height="8" rx="1"/>
+            <line x1="2" y1="9" x2="4" y2="9"/>
+            <line x1="2" y1="15" x2="4" y2="15"/>
+            <line x1="20" y1="9" x2="22" y2="9"/>
+            <line x1="20" y1="15" x2="22" y2="15"/>
+            <line x1="9" y1="2" x2="9" y2="4"/>
+            <line x1="15" y1="2" x2="15" y2="4"/>
+            <line x1="9" y1="20" x2="9" y2="22"/>
+            <line x1="15" y1="20" x2="15" y2="22"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="metric-tile-value" id="gpu-util-val">{{ gpu.utilization_gpu }}%</div>
+    <div class="progress-bar-container">
+      <div id="gpu-util-bar" class="progress-fill" style="width: {{ gpu.utilization_gpu }}%;"></div>
+    </div>
+    <div class="metric-tile-sub">
+      <span id="gpu-device-name" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">{{ gpu.device_name }}</span>
+    </div>
+  </div>
+
+  <!-- Dedicated VRAM -->
+  <div class="metric-tile">
+    <div class="metric-tile-header">
+      <span class="metric-tile-label">VRAM MEMORY</span>
+      <div class="metric-tile-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/>
+          <line x1="6" y1="10" x2="6" y2="14"/>
+          <line x1="10" y1="10" x2="10" y2="14"/>
+          <line x1="14" y1="10" x2="14" y2="14"/>
+          <line x1="18" y1="10" x2="18" y2="14"/>
+        </svg>
+      </div>
+    </div>
+    <div class="metric-tile-value">
+      <span id="vram-used-val">{{ gpu.vram_used_mb }}</span> 
+      <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-secondary);" id="vram-total-val">/ {{ gpu.vram_total_mb }} MB</span>
+    </div>
+    <div class="progress-bar-container">
+      <div id="vram-bar" class="progress-fill" style="width: {{ gpu.vram_pct }}%;"></div>
+    </div>
+    <div class="metric-tile-sub">
+      <span id="vram-sub">{{ gpu.vram_pct }}% digunakan</span>
+      <span id="gpu-temp-badge" style="color: var(--text-muted);">Suhu: {{ gpu.temperature }}°C</span>
+    </div>
+  </div>
+
+  <!-- Host CPU & RAM -->
+  <div class="metric-tile">
+    <div class="metric-tile-header">
+      <span class="metric-tile-label">CPU & HOST RAM</span>
+      <div class="metric-tile-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+      </div>
+    </div>
+    <div class="metric-tile-value">
+      <span id="cpu-util-val">{{ resources.cpu_pct }}%</span> 
+      <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-secondary);">CPU</span>
+    </div>
+    <div class="progress-bar-container">
+      <div id="cpu-bar" class="progress-fill" style="width: {{ resources.cpu_pct }}%;"></div>
+    </div>
+    <div class="metric-tile-sub">
+      <span id="ram-sub">RAM: {{ resources.ram_used_gb }} / {{ resources.ram_total_gb }} GB ({{ resources.ram_pct }}%)</span>
+    </div>
+  </div>
+
+  <!-- Datasets & Training History -->
+  <div class="metric-tile">
+    <div class="metric-tile-header">
+      <span class="metric-tile-label">STORAGE & RUNS</span>
+      <div class="metric-tile-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/>
+          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+        </svg>
+      </div>
+    </div>
+    <div class="metric-tile-value">
+      {{ total_datasets }} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-secondary);">Datasets</span> / {{ total_runs }} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-secondary);">Runs</span>
+    </div>
+    <div class="progress-bar-container">
+      <div class="progress-fill" style="width: 100%; background: linear-gradient(90deg, #60a5fa 0%, #38bdf8 100%);"></div>
+    </div>
+    <div class="metric-tile-sub">
+      <span>SQLite Local Database</span>
+      <span style="color: var(--success); font-weight: 500;">Online</span>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Training Runs Section -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      Recent Training Runs
+      <span style="font-size: 0.75rem; background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); padding: 1px 7px; border-radius: var(--radius-xs); margin-left: 0.25rem;">
+        {{ recent_runs|length }}
+      </span>
+    </div>
+    <a href="{{ url_for('training.history') }}" class="btn btn-secondary btn-sm">
+      Lihat Semua Riwayat
+    </a>
+  </div>
+  
+  <div class="table-container">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Run ID</th>
+          <th>Dataset</th>
+          <th>Model</th>
+          <th>Epoch</th>
+          <th>Status</th>
+          <th>Best mAP50</th>
+          <th>Best mAP50-95</th>
+          <th>Durasi</th>
+          <th>Created At</th>
+          <th style="text-align: right;">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if recent_runs %}
+          {% for r in recent_runs %}
+          <tr class="{% if best_run_id and r.id == best_run_id %}best-run-row{% endif %}">
+            <td>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-family: monospace; font-size: 0.85rem; font-weight: 600; color: #fff;">{{ r.id }}</span>
+                {% if best_run_id and r.id == best_run_id %}
+                  <span class="badge badge-best-run" title="Hasil Training Terbaik" style="font-size: 0.65rem; padding: 1px 6px;">
+                    ★ TERBAIK
+                  </span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <span style="font-weight: 500;">{{ r.dataset.name if r.dataset else '-' }}</span>
+            </td>
+            <td>
+              <code style="background: rgba(56, 189, 248, 0.08); border: 1px solid var(--accent-border); color: var(--cloud-300); padding: 2px 7px; border-radius: 4px; font-size: 0.8rem;">{{ r.model_name }}</code>
+            </td>
+            <td>{{ r.current_epoch }} / {{ r.total_epochs }}</td>
+            <td>
+              {% if r.status == 'COMPLETED' %}
+                <span class="badge badge-success">Completed</span>
+              {% elif r.status == 'RUNNING' %}
+                <span class="badge badge-running">Running</span>
+              {% elif r.status == 'STARTING' %}
+                <span class="badge badge-running">Starting</span>
+              {% elif r.status == 'FAILED' %}
+                <span class="badge badge-danger">Failed</span>
+              {% elif r.status == 'STOPPED' %}
+                <span class="badge badge-warning">Stopped</span>
+              {% elif r.status == 'INTERRUPTED' %}
+                <span class="badge badge-danger">Interrupted</span>
+              {% else %}
+                <span class="badge badge-neutral">{{ r.status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <strong style="font-family: monospace; {% if best_run_id and r.id == best_run_id %}color: #34d399;{% else %}color: #fff;{% endif %}">
+                {{ r.best_map50 if r.best_map50 is not none else '-' }}
+              </strong>
+            </td>
+            <td>
+              <strong style="font-family: monospace; {% if best_run_id and r.id == best_run_id %}color: #fde047;{% else %}color: var(--text-secondary);{% endif %}">
+                {{ r.best_map5095 if r.best_map5095 is not none else '-' }}
+              </strong>
+            </td>
+            <td style="color: var(--text-secondary); font-size: 0.825rem;">{{ r.get_formatted_duration() }}</td>
+            <td style="color: var(--text-muted); font-size: 0.8rem;">{{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '-' }}</td>
+            <td style="text-align: right;">
+              <div style="display: inline-flex; gap: 0.4rem; align-items: center;">
+                {% if r.status in ['RUNNING', 'STARTING'] %}
+                  <a href="{{ url_for('training.monitor', run_id=r.id) }}" class="btn btn-primary btn-sm">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polygon points="10 8 16 12 10 16 10 8"/>
+                    </svg>
+                    Monitor
+                  </a>
+                {% else %}
+                  <a href="{{ url_for('results.detail', run_id=r.id) }}" class="btn btn-secondary btn-sm">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="20" x2="18" y2="10"/>
+                      <line x1="12" y1="20" x2="12" y2="4"/>
+                      <line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    Results
+                  </a>
+                {% endif %}
+                <form action="{{ url_for('training.delete_run', run_id=r.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Hapus riwayat training {{ r.id }} beserta file outputnya?');">
+                  <button type="submit" class="btn btn-danger btn-sm" title="Hapus Riwayat">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="10" style="text-align: center; padding: 3.5rem 1.5rem;">
+              <div style="max-width: 360px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 0.75rem;">
+                <div style="width: 44px; height: 44px; border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.03); border: 1px dashed var(--border-card); display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </div>
+                <div style="font-weight: 600; color: var(--text-white); font-size: 0.95rem;">Belum ada riwayat training</div>
+                <div style="font-size: 0.825rem; color: var(--text-secondary); line-height: 1.4;">
+                  Mulai training pertama Anda dengan memilih model dan dataset yang tersedia.
+                </div>
+                <a href="{{ url_for('training.new_training') }}" class="btn btn-primary btn-sm" style="margin-top: 0.5rem;">
+                  Mulai Training Pertama
+                </a>
+              </div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Live Telemetry Polling Script -->
+<script>
+  function pollTelemetry() {
+    // 1. Fetch GPU Metrics
+    fetch('/system/api/gpu')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.available) {
+          const gpuUtil = data.utilization_gpu || 0;
+          const vramUsed = data.vram_used_mb || 0;
+          const vramTotal = data.vram_total_mb || 0;
+          const vramPct = data.vram_pct || 0;
+          const temp = data.temperature || 0;
+
+          const gpuUtilEl = document.getElementById('gpu-util-val');
+          if (gpuUtilEl) gpuUtilEl.innerText = `${gpuUtil}%`;
+
+          const gpuBarEl = document.getElementById('gpu-util-bar');
+          if (gpuBarEl) gpuBarEl.style.width = `${Math.min(100, Math.max(0, gpuUtil))}%`;
+
+          const gpuDevEl = document.getElementById('gpu-device-name');
+          if (gpuDevEl) gpuDevEl.innerText = data.device_name || 'NVIDIA GPU';
+
+          const vramUsedEl = document.getElementById('vram-used-val');
+          if (vramUsedEl) vramUsedEl.innerText = vramUsed;
+
+          const vramTotalEl = document.getElementById('vram-total-val');
+          if (vramTotalEl) vramTotalEl.innerText = `/ ${vramTotal} MB`;
+
+          const vramBarEl = document.getElementById('vram-bar');
+          if (vramBarEl) vramBarEl.style.width = `${Math.min(100, Math.max(0, vramPct))}%`;
+
+          const vramSubEl = document.getElementById('vram-sub');
+          if (vramSubEl) vramSubEl.innerText = `${vramPct}% digunakan`;
+
+          const gpuTempEl = document.getElementById('gpu-temp-badge');
+          if (gpuTempEl) gpuTempEl.innerText = `Suhu: ${temp}°C`;
+        }
+      })
+      .catch(() => {});
+
+    // 2. Fetch CPU & RAM Resources
+    fetch('/system/api/resources')
+      .then(res => res.json())
+      .then(data => {
+        if (data) {
+          const cpuPct = data.cpu_pct || 0;
+          const ramUsed = data.ram_used_gb || 0;
+          const ramTotal = data.ram_total_gb || 0;
+          const ramPct = data.ram_pct || 0;
+
+          const cpuEl = document.getElementById('cpu-util-val');
+          if (cpuEl) cpuEl.innerText = `${cpuPct}%`;
+
+          const cpuBarEl = document.getElementById('cpu-bar');
+          if (cpuBarEl) cpuBarEl.style.width = `${Math.min(100, Math.max(0, cpuPct))}%`;
+
+          const ramSubEl = document.getElementById('ram-sub');
+          if (ramSubEl) ramSubEl.innerText = `RAM: ${ramUsed} / ${ramTotal} GB (${ramPct}%)`;
+        }
+      })
+      .catch(() => {});
+  }
+
+  // Poll immediately on page load, repeat every 1.5 seconds smoothly
+  pollTelemetry();
+  setInterval(pollTelemetry, 1500);
+</script>
+{% endblock %}

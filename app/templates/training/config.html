@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}New Training | YOLO Training Studio{% endblock %}
+{% block header_title %}Konfigurasi Training Baru{% endblock %}
+
+{% block content %}
+<style>
+  html, body, .app-shell, .main-wrapper {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .page-body {
+    height: calc(100vh - 48px) !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 1.25rem 1.5rem !important;
+    box-sizing: border-box !important;
+  }
+  #train-form {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .train-header-fixed {
+    flex-shrink: 0;
+    margin-bottom: 1rem;
+  }
+  .train-scroll-container {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+  }
+  .train-scroll-container::-webkit-scrollbar {
+    width: 6px;
+  }
+  .train-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+  }
+</style>
+
+<form id="train-form" action="{{ url_for('training.start_training') }}" method="POST">
+  <div class="train-header-fixed" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 2px;">Setup Pelatihan Model</h2>
+      <p style="color: var(--text-secondary); font-size: 0.82rem; margin: 0;">Konfigurasi parameter model, hyperparameter, optimizer, dan augmentasi YOLO.</p>
+    </div>
+    <div style="display: flex; gap: 0.75rem;">
+      <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">Batal</a>
+      <button type="button" onclick="showSummaryModal()" class="btn btn-primary" style="padding: 0.6rem 1.5rem;">
+        Mulai Training
+      </button>
+    </div>
+  </div>
+
+  <div class="train-scroll-container">
+
+  <!-- Hardware Safety Notice (PRD Section 60) -->
+  {% if gpu.available and gpu.vram_free_mb < 2000 %}
+    <div class="alert alert-error" style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: #f87171;">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <div>
+        <strong>Peringatan Hardware VRAM:</strong> VRAM bebas saat ini hanya <strong>{{ gpu.vram_free_mb }} MB</strong>. Disarankan mengecilkan batch size (misal: 8) atau menghentikan proses GPU lain agar tidak mengalami CUDA Out-Of-Memory.
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- 1. Model & Dataset Selection (PRD Section 14) -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">1. Dataset & Model Selection</div>
+    </div>
+    <div class="card-body">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <label class="form-label" for="dataset_id" style="margin-bottom: 0;">Pilih Dataset *</label>
+            {% if active_project %}
+              <span style="font-size: 0.72rem; color: var(--cloud-300); background: rgba(56, 189, 248, 0.1); border: 1px solid var(--accent-border); padding: 1px 7px; border-radius: 4px;">
+                {{ active_project.name }}
+              </span>
+            {% else %}
+              <span style="font-size: 0.72rem; color: var(--text-muted);">Mode Semua Project</span>
+            {% endif %}
+          </div>
+
+          <select class="form-select" id="dataset_id" name="dataset_id" required>
+            {% if datasets %}
+              <option value="" disabled {% if not selected_dataset %}selected{% endif %}>-- Pilih Dataset yang Tersedia --</option>
+              {% for ds in datasets %}
+                <option value="{{ ds.id }}" {% if selected_dataset and selected_dataset.id == ds.id %}selected{% endif %}>
+                  {{ ds.name }} ({{ ds.train_count }} train, {{ ds.num_classes }} class) {% if not active_project or active_project_id == 'all' %}[{{ ds.project.name if ds.project else 'Tanpa Project' }}]{% endif %}
+                </option>
+              {% endfor %}
+            {% else %}
+              <option value="" disabled selected>
+                {% if active_project %}
+                  Belum ada dataset di project "{{ active_project.name }}"
+                {% else %}
+                  Belum ada dataset yang tersedia
+                {% endif %}
+              </option>
+            {% endif %}
+          </select>
+
+          {% if not datasets %}
+            <div style="margin-top: 6px; padding: 7px 10px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.22); border-radius: 6px; font-size: 0.75rem; color: #fca5a5; display: flex; align-items: center; justify-content: space-between;">
+              <span>Project ini belum memiliki dataset.</span>
+              <a href="{{ url_for('datasets.upload_page') }}" style="color: var(--cloud-300); text-decoration: underline; font-weight: 600; white-space: nowrap; margin-left: 6px;">
+                Upload dataset &rarr;
+              </a>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="model_name">Pilih Model Pre-trained *</label>
+          <select class="form-select" id="model_name" name="model_name">
+            {% for m in available_models %}
+              <option value="{{ m }}" {% if m == 'yolov8s.pt' %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Basic Hyperparameters (PRD Section 15 & 17) -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">2. Basic Hyperparameters & Device</div>
+    </div>
+    <div class="card-body">
+      <div class="form-grid-4">
+        <div class="form-group">
+          <label class="form-label" for="epochs">Epochs</label>
+          <input type="number" class="form-control" id="epochs" name="epochs" value="100" min="1" max="1000">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="batch">Batch Size</label>
+          <input type="number" class="form-control" id="batch" name="batch" value="16" min="1" max="128">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="imgsz">Image Size (px)</label>
+          <select class="form-select" id="imgsz" name="imgsz">
+            <option value="640" selected>640 x 640 (Standar Cepat)</option>
+            <option value="864">864 x 864 (Resolusi Tinggi)</option>
+            <option value="512">512 x 512 (Ringan)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="device">Perangkat (Device)</label>
+          <select class="form-select" id="device" name="device">
+            {% for dev in devices %}
+              <option value="{{ dev.id }}" {% if dev.id == '0' %}selected{% endif %}>{{ dev.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid-4" style="margin-top: 0.5rem;">
+        <div class="form-group">
+          <label class="form-label" for="patience">Patience (Early Stop)</label>
+          <input type="number" class="form-control" id="patience" name="patience" value="50" min="5">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="workers">Workers Dataloader</label>
+          <input type="number" class="form-control" id="workers" name="workers" value="0" min="0" max="16">
+          <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">Gunakan 0 di Windows untuk stabilitas.</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="seed">Seed Acak</label>
+          <input type="number" class="form-control" id="seed" name="seed" value="0">
+        </div>
+
+        <div class="form-group" style="display: flex; flex-direction: column; justify-content: center;">
+          <label class="form-label">RAM Cache</label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-top: 0.25rem;">
+            <input type="checkbox" name="cache" id="cache" value="true">
+            <span style="font-size: 0.85rem; color: var(--text-secondary);">Cache Images di RAM</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Optimization Parameters (PRD Section 16) -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">3. Optimizer & Learning Rate</div>
+    </div>
+    <div class="card-body">
+      <div class="form-grid-4">
+        <div class="form-group">
+          <label class="form-label" for="optimizer">Optimizer</label>
+          <select class="form-select" id="optimizer" name="optimizer">
+            <option value="AdamW" selected>AdamW (Direkomendasikan)</option>
+            <option value="SGD">SGD</option>
+            <option value="Adam">Adam</option>
+            <option value="RMSProp">RMSProp</option>
+            <option value="auto">Auto</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="lr0">Initial LR (lr0)</label>
+          <input type="number" step="0.0001" class="form-control" id="lr0" name="lr0" value="0.001">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="lrf">Final LR Factor (lrf)</label>
+          <input type="number" step="0.001" class="form-control" id="lrf" name="lrf" value="0.01">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="momentum">Momentum</label>
+          <input type="number" step="0.001" class="form-control" id="momentum" name="momentum" value="0.937">
+        </div>
+      </div>
+
+      <div class="form-grid-3">
+        <div class="form-group">
+          <label class="form-label" for="weight_decay">Weight Decay</label>
+          <input type="number" step="0.0001" class="form-control" id="weight_decay" name="weight_decay" value="0.0005">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="warmup_epochs">Warmup Epochs</label>
+          <input type="number" step="0.5" class="form-control" id="warmup_epochs" name="warmup_epochs" value="3.0">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="close_mosaic">Close Mosaic Epochs</label>
+          <input type="number" class="form-control" id="close_mosaic" name="close_mosaic" value="10">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Augmentation Configuration (PRD Section 18 & 19) -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">4. Data Augmentation (YOLO Transform)</div>
+      <!-- Master Toggle (PRD Section 18) -->
+      <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+        <input type="checkbox" id="aug_enabled" name="aug_enabled" value="true" checked onchange="toggleAugmentationSection()">
+        <span style="font-weight: 600; color: #fff; font-size: 0.85rem;">Gunakan Augmentasi</span>
+      </label>
+    </div>
+    <div class="card-body" id="aug-controls-body">
+      <div class="form-grid-3">
+        <div class="form-group">
+          <label class="form-label">HSV Hue (hsv_h)</label>
+          <input type="number" step="0.005" class="form-control" name="hsv_h" value="0.015">
+        </div>
+        <div class="form-group">
+          <label class="form-label">HSV Saturation (hsv_s)</label>
+          <input type="number" step="0.05" class="form-control" name="hsv_s" value="0.7">
+        </div>
+        <div class="form-group">
+          <label class="form-label">HSV Value / Brightness (hsv_v)</label>
+          <input type="number" step="0.05" class="form-control" name="hsv_v" value="0.4">
+        </div>
+      </div>
+
+      <div class="form-grid-3">
+        <div class="form-group">
+          <label class="form-label">Rotasi Derajat (degrees)</label>
+          <input type="number" step="1" class="form-control" name="degrees" value="0.0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Translate Shift</label>
+          <input type="number" step="0.05" class="form-control" name="translate" value="0.1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scale Zoom Factor</label>
+          <input type="number" step="0.05" class="form-control" name="scale" value="0.5">
+        </div>
+      </div>
+
+      <div class="form-grid-3">
+        <div class="form-group">
+          <label class="form-label">Flip Horizontal (fliplr)</label>
+          <input type="number" step="0.1" class="form-control" name="fliplr" value="0.5" min="0" max="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Flip Vertical (flipud)</label>
+          <input type="number" step="0.1" class="form-control" name="flipud" value="0.0" min="0" max="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mosaic</label>
+          <input type="number" step="0.1" class="form-control" name="mosaic" value="1.0" min="0" max="1">
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- Summary Confirmation Modal (PRD Section 20) -->
+  <div id="summary-modal" class="modal-overlay">
+    <div class="modal-body" style="background: #18181b; border: 1px solid #27272a; border-radius: 8px; width: 500px; padding: 1.5rem; color: #fff;">
+      <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+        <span>Konfirmasi Training Summary</span>
+        <span onclick="closeSummaryModal()" style="cursor: pointer; color: #a1a1aa;">&times;</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.85rem; border-top: 1px solid #27272a; border-bottom: 1px solid #27272a; padding: 1rem 0; margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between;"><span style="color: #a1a1aa;">Dataset:</span><strong id="sum-dataset">-</strong></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #a1a1aa;">Model:</span><strong id="sum-model">-</strong></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #a1a1aa;">Epochs / Batch:</span><strong id="sum-epoch-batch">-</strong></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #a1a1aa;">Image Size:</span><strong id="sum-imgsz">-</strong></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #a1a1aa;">Device:</span><strong id="sum-device">-</strong></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #a1a1aa;">Optimizer:</span><strong id="sum-optimizer">-</strong></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #a1a1aa;">Augmentation:</span><strong id="sum-aug">-</strong></div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" onclick="closeSummaryModal()" class="btn btn-secondary">Periksa Lagi</button>
+        <button type="button" onclick="submitTraining()" class="btn btn-primary">Mulai Sekarang</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+  function toggleAugmentationSection() {
+    const isChecked = document.getElementById('aug_enabled').checked;
+    const body = document.getElementById('aug-controls-body');
+    body.style.opacity = isChecked ? '1' : '0.4';
+    body.style.pointerEvents = isChecked ? 'auto' : 'none';
+  }
+
+  function showSummaryModal() {
+    const dsSelect = document.getElementById('dataset_id');
+    if (!dsSelect.value) {
+      alert("Silakan pilih dataset terlebih dahulu!");
+      dsSelect.focus();
+      return;
+    }
+
+    document.getElementById('sum-dataset').innerText = dsSelect.options[dsSelect.selectedIndex].text;
+    document.getElementById('sum-model').innerText = document.getElementById('model_name').value;
+    document.getElementById('sum-epoch-batch').innerText = `${document.getElementById('epochs').value} Epochs / Batch ${document.getElementById('batch').value}`;
+    document.getElementById('sum-imgsz').innerText = `${document.getElementById('imgsz').value} px`;
+    
+    const devSelect = document.getElementById('device');
+    document.getElementById('sum-device').innerText = devSelect.options[devSelect.selectedIndex].text;
+    document.getElementById('sum-optimizer').innerText = document.getElementById('optimizer').value;
+    document.getElementById('sum-aug').innerText = document.getElementById('aug_enabled').checked ? "Enabled (Aktif)" : "Disabled (Mati)";
+
+    document.getElementById('summary-modal').classList.add('active');
+  }
+
+  function closeSummaryModal() {
+    document.getElementById('summary-modal').classList.remove('active');
+  }
+
+  function submitTraining() {
+    document.getElementById('train-form').submit();
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Dataset | YOLO Training Studio{% endblock %}
+{% block header_title %}Upload Dataset Baru{% endblock %}
+
+{% block content %}
+<div style="max-width: 650px; margin: 0 auto;">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Upload Arsip Dataset (.ZIP)</div>
+      <a href="{{ url_for('datasets.list_datasets') }}" class="btn btn-secondary btn-sm">Kembali</a>
+    </div>
+    <div class="card-body">
+      <form id="upload-form" action="{{ url_for('datasets.upload_dataset') }}" method="POST" enctype="multipart/form-data">
+        
+        <div class="form-group">
+          <label class="form-label" for="project_id">Pilih Project / Workspace *</label>
+          <select class="form-control" id="project_id" name="project_id" required>
+            {% for p in projects %}
+              <option value="{{ p.id }}" {% if active_project and active_project.id == p.id %}selected{% elif not active_project and loop.first %}selected{% endif %}>
+                {{ p.name }}
+              </option>
+            {% endfor %}
+          </select>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+            Dataset akan dikelompokkan ke dalam project ini.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="dataset_name">Nama Dataset (Opsional)</label>
+          <input type="text" class="form-control" id="dataset_name" name="dataset_name" placeholder="Contoh: packing_remote_v1">
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+            Jika dikosongkan, nama file ZIP akan digunakan sebagai nama dataset.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="dataset_zip">Pilih File ZIP Dataset *</label>
+          <input type="file" class="form-control" id="dataset_zip" name="dataset_zip" accept=".zip" required>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+            Format yang didukung: <strong>.zip</strong> berisi file <code>data.yaml</code> serta folder <code>images/</code> dan <code>labels/</code>.
+          </div>
+        </div>
+
+        <!-- Progress Bar (PRD Section 67) -->
+        <div id="progress-section" style="display: none; margin: 1.5rem 0;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.35rem;">
+            <span id="progress-label" style="color: var(--text-secondary);">Mengunggah file...</span>
+            <span id="progress-pct" style="font-weight: 700; color: #fff;">0%</span>
+          </div>
+          <div class="progress-bar-container">
+            <div id="progress-fill" class="progress-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <a href="{{ url_for('datasets.list_datasets') }}" class="btn btn-secondary">Batal</a>
+          <button type="submit" id="submit-btn" class="btn btn-primary">
+            Upload & Ekstrak Dataset
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  const form = document.getElementById('upload-form');
+  const fileInput = document.getElementById('dataset_zip');
+  const progressSec = document.getElementById('progress-section');
+  const progressFill = document.getElementById('progress-fill');
+  const progressPct = document.getElementById('progress-pct');
+  const progressLabel = document.getElementById('progress-label');
+  const submitBtn = document.getElementById('submit-btn');
+
+  form.addEventListener('submit', function(e) {
+    if (!fileInput.files || fileInput.files.length === 0) return;
+
+    e.preventDefault();
+
+    const formData = new FormData(form);
+    const xhr = new XMLHttpRequest();
+
+    progressSec.style.display = 'block';
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Mengunggah...';
+
+    xhr.upload.addEventListener('progress', function(event) {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        progressFill.style.width = percent + '%';
+        progressPct.innerText = percent + '%';
+        if (percent >= 100) {
+          progressLabel.innerText = 'Mengekstrak dan memvalidasi dataset di server...';
+        }
+      }
+    });
+
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === XMLHttpRequest.DONE) {
+        if (xhr.status >= 200 && xhr.status < 400) {
+          // Redirect ke halaman detail atau daftar
+          window.location.href = xhr.responseURL || "{{ url_for('datasets.list_datasets') }}";
+        } else {
+          alert('Terjadi kesalahan saat mengunggah dataset.');
+          submitBtn.disabled = false;
+          submitBtn.innerText = 'Upload & Ekstrak Dataset';
+        }
+      }
+    };
+
+    xhr.open('POST', form.action, true);
+    xhr.send(formData);
+  });
+</script>
+{% endblock %}

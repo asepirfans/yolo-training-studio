@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}Workspace & Project | YOLO Training Studio{% endblock %}
+
+{% block content %}
+<style>
+  html, body {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .app-shell {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .main-wrapper {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .page-body {
+    height: calc(100vh - 48px) !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 1.25rem 1.5rem 0.5rem !important;
+    box-sizing: border-box !important;
+  }
+  .page-header {
+    flex-shrink: 0 !important;
+    margin-bottom: 1.25rem !important;
+  }
+  .projects-scroll-container {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    padding-right: 8px !important;
+    margin-right: -4px !important;
+  }
+  .projects-scroll-container::-webkit-scrollbar {
+    width: 6px;
+  }
+  .projects-scroll-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+  }
+  .projects-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+  }
+  .projects-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(56, 189, 248, 0.35);
+  }
+</style>
+
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+  <div>
+    <h1 class="page-title">Workspace & Manajemen Project</h1>
+    <p class="page-subtitle">Kelola ruang kerja terpisah untuk mengelompokkan dataset, konfigurasi training, dan pengujian model.</p>
+  </div>
+  <div style="display: flex; gap: 0.6rem; align-items: center;">
+    <a href="{{ url_for('projects.set_active', project_id='all') }}" class="btn btn-secondary btn-sm {% if active_project_id == 'all' or not active_project %}active{% endif %}" style="display: inline-flex; align-items: center; gap: 6px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+      Semua Project (Global)
+    </a>
+    <button type="button" class="btn btn-primary btn-sm" onclick="openNewProjectModal()" style="display: inline-flex; align-items: center; gap: 6px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Buat Project Baru
+    </button>
+  </div>
+</div>
+
+<!-- Scrollable Project Cards Container -->
+<div class="projects-scroll-container">
+  <!-- Project Cards Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.25rem; padding-bottom: 2rem;">
+  {% for item in project_cards %}
+    {% set p = item.project %}
+    {% set is_active = (active_project_id == p.id) %}
+    <div class="card project-card" style="border: 1px solid {% if is_active %}var(--cloud-400){% else %}var(--border-card){% endif %}; {% if is_active %}box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25), 0 8px 24px rgba(56, 189, 248, 0.08);{% endif %} position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 1.25rem; background: #0c121e; border-radius: var(--radius-md);">
+      
+      <!-- Top Card Section -->
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.85rem;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 38px; height: 38px; border-radius: 8px; background: {% if is_active %}rgba(56, 189, 248, 0.15){% else %}rgba(255, 255, 255, 0.04){% endif %}; border: 1px solid {% if is_active %}rgba(56, 189, 248, 0.3){% else %}rgba(255, 255, 255, 0.06){% endif %}; display: flex; align-items: center; justify-content: center; color: {% if is_active %}var(--cloud-400){% else %}var(--text-secondary){% endif %}; flex-shrink: 0;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+              </svg>
+            </div>
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff; margin: 0 0 2px 0;">{{ p.name }}</h3>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">Dibuat: {{ p.created_at.strftime('%d %b %Y') if p.created_at else '-' }}</span>
+            </div>
+          </div>
+
+          {% if is_active %}
+            <span class="badge badge-success" style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; font-size: 0.72rem;">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #fff; display: inline-block;"></span>
+              Sedang Aktif
+            </span>
+          {% else %}
+            <form action="{{ url_for('projects.set_active', project_id=p.id) }}" method="POST" style="margin: 0;">
+              <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 3px 9px;">
+                Pilih Project
+              </button>
+            </form>
+          {% endif %}
+        </div>
+
+        <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.45; margin-bottom: 1.1rem; min-height: 38px;">
+          {{ p.description or 'Tidak ada deskripsi khusus untuk ruang kerja project ini.' }}
+        </p>
+
+        <!-- Stats Chips -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; background: rgba(255, 255, 255, 0.02); padding: 0.75rem 0.95rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.04); margin-bottom: 1rem;">
+          <div>
+            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">DATASET</div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #fff;">{{ item.dataset_count }}</div>
+          </div>
+          <div>
+            <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">TRAINING RUNS</div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: var(--cloud-400);">{{ item.run_count }}</div>
+          </div>
+        </div>
+
+        <!-- Best mAP Badge -->
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.85rem; padding: 0 2px;">
+          <span>Model Terbaik:</span>
+          {% if item.best_map50 is not none %}
+            <a href="{{ url_for('results.detail', run_id=item.best_run_id) }}" style="color: var(--success); font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 3px;">
+              mAP50: {{ "%.3f"|format(item.best_map50) }} &rarr;
+            </a>
+          {% else %}
+            <span style="color: var(--text-muted); font-style: italic; font-size: 0.75rem;">Belum ada hasil training</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Action Buttons Footer -->
+      <div style="display: flex; gap: 0.4rem; border-top: 1px solid var(--border-card); padding-top: 0.85rem; margin-top: 0.5rem; align-items: center;">
+        <a href="{{ url_for('training.new_training') }}" class="btn btn-secondary btn-sm" style="flex: 1; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 0.78rem;" onclick="setActiveBeforeAction('{{ p.id }}')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Train YOLO
+        </a>
+        <a href="{{ url_for('testing.index') }}" class="btn btn-secondary btn-sm" style="flex: 1; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 0.78rem;" onclick="setActiveBeforeAction('{{ p.id }}')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="22" y1="12" x2="18" y2="12"/>
+            <line x1="6" y1="12" x2="2" y2="12"/>
+            <line x1="12" y1="6" x2="12" y2="2"/>
+            <line x1="12" y1="22" x2="12" y2="18"/>
+          </svg>
+          Test
+        </a>
+
+        <!-- Edit Button -->
+        <button type="button" class="btn btn-secondary btn-sm" style="color: var(--cloud-300); padding: 0.4rem 0.65rem;" title="Edit Nama & Deskripsi Project" data-id="{{ p.id }}" data-name="{{ p.name }}" data-desc="{{ p.description or '' }}" onclick="openEditProjectModal(this)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+          </svg>
+        </button>
+
+        <form action="{{ url_for('projects.delete_project', project_id=p.id) }}" method="POST" onsubmit="return confirm('Yakin ingin menghapus project \'{{ p.name }}\'? Semua dataset dan hasil training di dalamnya akan ikut terhapus!')" style="margin: 0;">
+          <button type="submit" class="btn btn-secondary btn-sm" style="color: var(--danger); padding: 0.4rem 0.65rem;" title="Hapus Project">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+</div>
+
+<!-- Modal Tambah Project Baru (Proper Dark Card Dialog) -->
+<div id="modal-new-project" class="modal-overlay" onclick="closeNewProjectModal()">
+  <div class="modal-dialog" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 class="modal-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          <line x1="12" y1="11" x2="12" y2="17"/>
+          <line x1="9" y1="14" x2="15" y2="14"/>
+        </svg>
+        Buat Workspace Project Baru
+      </h3>
+      <span onclick="closeNewProjectModal()" style="cursor: pointer; font-size: 1.5rem; line-height: 1; color: var(--text-muted); transition: color 0.15s ease;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">&times;</span>
+    </div>
+
+    <form action="{{ url_for('projects.create_project') }}" method="POST">
+      <div class="form-group" style="margin-bottom: 1.15rem;">
+        <label class="form-label" for="proj_name">Nama Project *</label>
+        <input type="text" class="form-control" id="proj_name" name="name" placeholder="Contoh: Vision Packing Box, QC Label Botol" required autofocus>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+          Gunakan nama unik yang mewakili objek atau kebutuhan deteksi Anda.
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label class="form-label" for="proj_desc">Deskripsi Singkat (Opsional)</label>
+        <textarea class="form-control" id="proj_desc" name="description" rows="3" placeholder="Jelaskan objek target, jalur produksi, atau catatan khusus..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle);">
+        <button type="button" class="btn btn-secondary" onclick="closeNewProjectModal()">Batal</button>
+        <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Simpan & Aktifkan Project
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Edit Project -->
+<div id="modal-edit-project" class="modal-overlay" onclick="closeEditProjectModal()">
+  <div class="modal-dialog" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 class="modal-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+        </svg>
+        Edit Workspace Project
+      </h3>
+      <span onclick="closeEditProjectModal()" style="cursor: pointer; font-size: 1.5rem; line-height: 1; color: var(--text-muted); transition: color 0.15s ease;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">&times;</span>
+    </div>
+
+    <form id="edit-project-form" action="" method="POST">
+      <div class="form-group" style="margin-bottom: 1.15rem;">
+        <label class="form-label" for="edit_proj_name">Nama Project *</label>
+        <input type="text" class="form-control" id="edit_proj_name" name="name" placeholder="Nama project..." required>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label class="form-label" for="edit_proj_desc">Deskripsi Singkat (Opsional)</label>
+        <textarea class="form-control" id="edit_proj_desc" name="description" rows="3" placeholder="Deskripsi project..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle);">
+        <button type="button" class="btn btn-secondary" onclick="closeEditProjectModal()">Batal</button>
+        <button type="submit" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Simpan Perubahan
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openNewProjectModal() {
+  document.getElementById('modal-new-project').classList.add('active');
+  setTimeout(() => {
+    document.getElementById('proj_name').focus();
+  }, 100);
+}
+
+function closeNewProjectModal() {
+  document.getElementById('modal-new-project').classList.remove('active');
+}
+
+function openEditProjectModal(btn) {
+  const id = btn.getAttribute('data-id');
+  const name = btn.getAttribute('data-name');
+  const desc = btn.getAttribute('data-desc');
+  document.getElementById('edit-project-form').action = `/projects/${id}/edit`;
+  document.getElementById('edit_proj_name').value = name;
+  document.getElementById('edit_proj_desc').value = desc;
+  document.getElementById('modal-edit-project').classList.add('active');
+  setTimeout(() => {
+    const input = document.getElementById('edit_proj_name');
+    input.focus();
+    input.select();
+  }, 100);
+}
+
+function closeEditProjectModal() {
+  document.getElementById('modal-edit-project').classList.remove('active');
+}
+
+// Close modals on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeNewProjectModal();
+    closeEditProjectModal();
+  }
+});
+
+function setActiveBeforeAction(projectId) {
+  fetch(`/projects/set-active/${projectId}`, { method: 'POST' });
+}
+</script>
+{% endblock %}

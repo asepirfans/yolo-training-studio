@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Monitor {{ run.id }} | YOLO Training Studio{% endblock %}
+{% block header_title %}Live Training Monitor{% endblock %}
+
+{% block content %}
+<!-- Training Header Card (PRD Section 25) -->
+<div class="card" style="margin-bottom: 1.25rem;">
+  <div class="card-body" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff;">{{ run.id }}</h2>
+        <span id="run-status-badge" class="badge {% if run.status == 'RUNNING' or run.status == 'STARTING' %}badge-running{% elif run.status == 'COMPLETED' %}badge-success{% elif run.status == 'FAILED' %}badge-danger{% else %}badge-neutral{% endif %}">
+          {{ run.status }}
+        </span>
+      </div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+        Model: <code>{{ run.model_name }}</code> | Dataset: <strong>{{ run.dataset.name }}</strong> | Dimulai: {{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') if run.started_at else '-' }}
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 0.75rem;">
+      <a href="{{ url_for('results.detail', run_id=run.id) }}" class="btn btn-secondary" id="view-results-btn">
+        Lihat Hasil Evaluasi
+      </a>
+      {% if run.status in ['RUNNING', 'STARTING', 'QUEUED'] %}
+        <button id="stop-btn" onclick="confirmStopTraining()" class="btn btn-danger">
+          Stop Training
+        </button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Progress Bar & Epoch Info (PRD Section 26) -->
+<div class="card" style="margin-bottom: 1.25rem;">
+  <div class="card-body" style="padding: 1rem 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-bottom: 0.5rem;">
+      <span style="font-weight: 600; color: #fff;">
+        Epoch: <span id="epoch-current">{{ run.current_epoch }}</span> / <span id="epoch-total">{{ run.total_epochs }}</span>
+      </span>
+      <span style="font-weight: 700; color: var(--accent-primary);" id="progress-text">
+        {{ ((run.current_epoch / run.total_epochs * 100)|round(1)) if run.total_epochs else 0 }}%
+      </span>
+    </div>
+    <div class="progress-bar-container">
+      <div id="epoch-progress-fill" class="progress-fill" style="width: {{ ((run.current_epoch / run.total_epochs * 100)|round(1)) if run.total_epochs else 0 }}%;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Live Metric Cards (PRD Section 27) -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-label">Best mAP50</div>
+    <div class="metric-value" id="val-map50">{{ run.best_map50 or '0.000' }}</div>
+    <div class="metric-sub">Mean Average Precision @ 0.5</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Best mAP50-95</div>
+    <div class="metric-value" id="val-map5095">{{ run.best_map5095 or '0.000' }}</div>
+    <div class="metric-sub">mAP rentang ketat</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Precision / Recall</div>
+    <div class="metric-value" id="val-pr">0.00 / 0.00</div>
+    <div class="metric-sub">Akurasi deteksi terkini</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Train Box Loss</div>
+    <div class="metric-value" id="val-loss">0.000</div>
+    <div class="metric-sub">Loss regresi bounding box</div>
+  </div>
+</div>
+
+<!-- Live Charts Grid (PRD Section 28) -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem;">
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">mAP Curves (Validation)</div>
+    </div>
+    <div class="card-body" style="height: 250px;">
+      <canvas id="mapChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">Loss Curves (Train & Val)</div>
+    </div>
+    <div class="card-body" style="height: 250px;">
+      <canvas id="lossChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Live Terminal Logs (PRD Section 29) -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Live Training Logs (Console Output)</div>
+    <button onclick="clearLogs()" class="btn btn-secondary btn-sm">Clear Display</button>
+  </div>
+  <div class="card-body" style="padding: 0;">
+    <div id="log-console" class="terminal-box"></div>
+  </div>
+</div>
+
+<script>
+  const runId = "{{ run.id }}";
+  let mapChart = null;
+  let lossChart = null;
+
+  // Inisialisasi Chart.js Offline (Professional AI Theme)
+  function initCharts() {
+    const ctxMap = document.getElementById('mapChart').getContext('2d');
+    mapChart = new Chart(ctxMap, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'mAP50',
+            data: [],
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2.2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#ffffff'
+          },
+          {
+            label: 'mAP50-95',
+            data: [],
+            borderColor: '#34d399',
+            backgroundColor: 'rgba(52, 211, 153, 0.06)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2.2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#ffffff'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#94a3b8', font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 11 } }
+          },
+          y: {
+            min: 0,
+            max: 1,
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#94a3b8', font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 11 } }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#f1f5f9',
+              usePointStyle: true,
+              pointStyle: 'circle',
+              boxWidth: 8,
+              boxHeight: 8,
+              font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 12 }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            borderWidth: 1,
+            titleColor: '#ffffff',
+            bodyColor: '#cbd5e1',
+            padding: 10,
+            cornerRadius: 8,
+            usePointStyle: true
+          }
+        }
+      }
+    });
+
+    const ctxLoss = document.getElementById('lossChart').getContext('2d');
+    lossChart = new Chart(ctxLoss, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Train Box Loss',
+            data: [],
+            borderColor: '#fbbf24',
+            backgroundColor: 'rgba(251, 191, 36, 0.08)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2.2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#ffffff'
+          },
+          {
+            label: 'Val Box Loss',
+            data: [],
+            borderColor: '#f87171',
+            backgroundColor: 'rgba(248, 113, 113, 0.06)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2.2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#ffffff'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#94a3b8', font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 11 } }
+          },
+          y: {
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#94a3b8', font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 11 } }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#f1f5f9',
+              usePointStyle: true,
+              pointStyle: 'circle',
+              boxWidth: 8,
+              boxHeight: 8,
+              font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 12 }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            borderWidth: 1,
+            titleColor: '#ffffff',
+            bodyColor: '#cbd5e1',
+            padding: 10,
+            cornerRadius: 8,
+            usePointStyle: true
+          }
+        }
+      }
+    });
+  }
+
+  // Update metrik dari API
+  function pollMetrics() {
+    fetch(`/training/${runId}/metrics`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data) return;
+
+        // Update Epoch Progress
+        document.getElementById('epoch-current').innerText = data.current_epoch || 0;
+        document.getElementById('epoch-total').innerText = data.total_epochs || 100;
+        const pct = Math.round((data.current_epoch / (data.total_epochs || 1)) * 100);
+        document.getElementById('progress-text').innerText = pct + '%';
+        document.getElementById('epoch-progress-fill').style.width = pct + '%';
+
+        // Update Metric Cards
+        if (data.metrics && data.metrics.best) {
+          document.getElementById('val-map50').innerText = data.metrics.best.map50 || '0.000';
+          document.getElementById('val-map5095').innerText = data.metrics.best.map5095 || '0.000';
+        }
+        if (data.metrics && data.metrics.latest) {
+          const lat = data.metrics.latest;
+          document.getElementById('val-pr').innerText = `${lat.precision || 0} / ${lat.recall || 0}`;
+          document.getElementById('val-loss').innerText = lat.train_box_loss || '0.000';
+        }
+
+        // Update Charts
+        if (data.metrics && data.metrics.epochs && data.metrics.epochs.length > 0) {
+          const labels = data.metrics.epochs.map(e => `Ep ${e.epoch}`);
+          mapChart.data.labels = labels;
+          mapChart.data.datasets[0].data = data.metrics.epochs.map(e => e.map50);
+          mapChart.data.datasets[1].data = data.metrics.epochs.map(e => e.map5095);
+          mapChart.update();
+
+          lossChart.data.labels = labels;
+          lossChart.data.datasets[0].data = data.metrics.epochs.map(e => e.train_box_loss);
+          lossChart.data.datasets[1].data = data.metrics.epochs.map(e => e.val_box_loss);
+          lossChart.update();
+        }
+
+        // Cek status
+        const statusBadge = document.getElementById('run-status-badge');
+        statusBadge.innerText = data.status;
+        if (data.status === 'COMPLETED') {
+          statusBadge.className = 'badge badge-success';
+          const stopBtn = document.getElementById('stop-btn');
+          if (stopBtn) stopBtn.style.display = 'none';
+        } else if (data.status === 'FAILED' || data.status === 'STOPPED') {
+          statusBadge.className = 'badge badge-danger';
+          const stopBtn = document.getElementById('stop-btn');
+          if (stopBtn) stopBtn.style.display = 'none';
+        }
+      })
+      .catch(() => {});
+  }
+
+  // SSE Stream Logs (PRD Section 29)
+  function startLogStream() {
+    const consoleBox = document.getElementById('log-console');
+    const evtSource = new EventSource(`/training/${runId}/logs/stream`);
+
+    evtSource.onmessage = function(e) {
+      if (e.data === ': ping') return;
+      const p = document.createElement('div');
+      p.textContent = e.data;
+      consoleBox.appendChild(p);
+      consoleBox.scrollTop = consoleBox.scrollHeight;
+    };
+
+    evtSource.onerror = function() {
+      // EventSource otomatis reconnect
+    };
+  }
+
+  function clearLogs() {
+    document.getElementById('log-console').innerHTML = '';
+  }
+
+  function confirmStopTraining() {
+    if (confirm("Apakah Anda yakin ingin menghentikan proses training ini secara paksa?")) {
+      fetch(`/training/${runId}/stop`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.message);
+          window.location.reload();
+        })
+        .catch(() => {
+          alert("Gagal menghentikan training.");
+        });
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initCharts();
+    pollMetrics();
+    setInterval(pollMetrics, 3000);
+    startLogStream();
+  });
+</script>
+{% endblock %}

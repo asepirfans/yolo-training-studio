@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Buat Sesi Pelabelan Baru | YOLO Training Studio{% endblock %}
+{% block header_title %}Sesi Pelabelan Baru{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+  <div>
+    <h1 class="page-hero-title">Buat Sesi Pelabelan Gambar</h1>
+    <p class="page-hero-sub">Unggah koleksi gambar individual atau langsung pilih satu folder gambar untuk dilabeli.</p>
+  </div>
+  <a href="{{ url_for('labeling.index') }}" class="btn btn-secondary">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="19" y1="12" x2="5" y2="12"/>
+      <polyline points="12 19 5 12 12 5"/>
+    </svg>
+    Kembali ke Daftar Sesi
+  </a>
+</div>
+
+<div class="card" style="max-width: 780px; margin: 0 auto;">
+  <div class="card-header">
+    <div class="card-title">Konfigurasi &amp; Unggah Gambar</div>
+  </div>
+
+  <div class="card-body" style="padding: 1.5rem;">
+    <form action="{{ url_for('labeling.create') }}" method="POST" enctype="multipart/form-data" id="new-session-form">
+      <!-- 1. Nama Sesi -->
+      <div class="form-group">
+        <label class="form-label" for="session_name">Nama Sesi Pelabelan *</label>
+        <input type="text" id="session_name" name="name" class="form-control" placeholder="Contoh: Dataset Packing Box V1" required autofocus>
+      </div>
+
+      <!-- 2. Project Workspace -->
+      <div class="form-group">
+        <label class="form-label" for="project_id">Ruang Kerja Project</label>
+        <select id="project_id" name="project_id" class="form-select">
+          {% for p in projects %}
+            <option value="{{ p.id }}" {% if (active_pid and active_pid == p.id) or (not active_pid and loop.first) %}selected{% endif %}>
+              {{ p.name }}
+            </option>
+          {% endfor %}
+        </select>
+        <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; display: block;">
+          Sesi pelabelan dan dataset hasil ekspor akan dikelompokkan ke dalam project ini.
+        </span>
+      </div>
+
+      <!-- 3. Tab Switcher Metode Upload -->
+      <div class="form-group">
+        <label class="form-label">Metode Unggah Gambar</label>
+        <div style="display: flex; gap: 8px; margin-bottom: 0.85rem;">
+          <button type="button" id="tab-btn-folder" class="btn btn-sm btn-primary" onclick="switchUploadTab('folder')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            Unggah 1 Folder Sekaligus (Direkomendasikan)
+          </button>
+          <button type="button" id="tab-btn-files" class="btn btn-sm btn-secondary" onclick="switchUploadTab('files')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Pilih File Gambar Individual
+          </button>
+        </div>
+
+        <!-- Box 1: Folder Upload -->
+        <div id="box-upload-folder" style="border: 2px dashed rgba(56, 189, 248, 0.35); border-radius: var(--radius-md); padding: 2rem 1.5rem; text-align: center; background: rgba(56, 189, 248, 0.02); transition: all 0.2s ease;">
+          <div style="width: 46px; height: 46px; border-radius: 12px; background: rgba(56, 189, 248, 0.1); display: inline-flex; align-items: center; justify-content: center; color: var(--cloud-400); margin-bottom: 0.75rem;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div style="font-size: 0.88rem; font-weight: 600; color: #fff; margin-bottom: 0.25rem;">Pilih Folder Berisi Gambar / Dataset Pra-Label</div>
+          <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5;">
+            Mendukung folder gambar murni ataupun struktur dataset YOLO lengkap (folder <code>images/</code>, <code>labels/</code>, serta <code>classes.txt</code> / <code>data.yaml</code>). Jika label terdeteksi, seluruh BBox dan kelas akan otomatis dimuat ke editor untuk ditinjau atau diedit.
+          </div>
+          <input type="file" id="input-folder" name="folder_files" webkitdirectory directory multiple style="display: none;" onchange="handleFileSelection(this, 'folder')">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('input-folder').click()">
+            Jelajahi Folder...
+          </button>
+          <div id="folder-status" style="margin-top: 0.75rem; font-size: 0.78rem; color: var(--cloud-300); font-weight: 600;"></div>
+        </div>
+
+        <!-- Box 2: Multi-File Upload -->
+        <div id="box-upload-files" style="display: none; border: 2px dashed var(--border-hover); border-radius: var(--radius-md); padding: 2rem 1.5rem; text-align: center; background: rgba(255, 255, 255, 0.015); transition: all 0.2s ease;">
+          <div style="width: 46px; height: 46px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); margin-bottom: 0.75rem;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <div style="font-size: 0.88rem; font-weight: 600; color: #fff; margin-bottom: 0.25rem;">Pilih Satu atau Banyak File Gambar</div>
+          <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Format yang didukung: JPG, PNG, JPEG, WEBP, BMP.
+          </div>
+          <input type="file" id="input-files" name="files" multiple accept="image/*" style="display: none;" onchange="handleFileSelection(this, 'files')">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('input-files').click()">
+            Pilih File Gambar...
+          </button>
+          <div id="files-status" style="margin-top: 0.75rem; font-size: 0.78rem; color: var(--cloud-300); font-weight: 600;"></div>
+        </div>
+      </div>
+
+      <!-- Upload Progress / Processing Banner -->
+      <div id="upload-progress-box" style="display: none; margin-top: 1.25rem; padding: 1rem; border-radius: var(--radius-md); background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 22px; height: 22px; border: 2.5px solid rgba(56, 189, 248, 0.25); border-top-color: var(--cloud-400); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;"></div>
+          <div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #fff;" id="progress-title">Sedang Mengunggah &amp; Memproses Dataset...</div>
+            <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;" id="progress-sub">Harap tunggu, proses ini dapat memakan waktu beberapa saat tergantung jumlah dan resolusi gambar.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <div style="margin-top: 1.75rem; display: flex; justify-content: flex-end; gap: 10px;">
+        <a href="{{ url_for('labeling.index') }}" class="btn btn-secondary">Batal</a>
+        <button type="submit" id="submit-btn" class="btn btn-primary" style="padding: 0.55rem 1.25rem;">
+          Buat Sesi &amp; Mulai Melabeli &rarr;
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+</style>
+
+<script>
+  let activeTab = 'folder';
+
+  function switchUploadTab(tab) {
+    activeTab = tab;
+    const btnFolder = document.getElementById('tab-btn-folder');
+    const btnFiles = document.getElementById('tab-btn-files');
+    const boxFolder = document.getElementById('box-upload-folder');
+    const boxFiles = document.getElementById('box-upload-files');
+
+    if (tab === 'folder') {
+      btnFolder.className = 'btn btn-sm btn-primary';
+      btnFiles.className = 'btn btn-sm btn-secondary';
+      boxFolder.style.display = 'block';
+      boxFiles.style.display = 'none';
+      document.getElementById('input-files').value = '';
+      document.getElementById('files-status').innerText = '';
+    } else {
+      btnFolder.className = 'btn btn-sm btn-secondary';
+      btnFiles.className = 'btn btn-sm btn-primary';
+      boxFolder.style.display = 'none';
+      boxFiles.style.display = 'block';
+      document.getElementById('input-folder').value = '';
+      document.getElementById('folder-status').innerText = '';
+    }
+  }
+
+  function handleFileSelection(input, type) {
+    const statusEl = document.getElementById(type === 'folder' ? 'folder-status' : 'files-status');
+    const files = input.files;
+    if (!files || files.length === 0) {
+      statusEl.innerText = '';
+      return;
+    }
+    
+    let validImgCount = 0;
+    let hasLabels = false;
+    let hasClasses = false;
+    const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.bmp'];
+    for (let i = 0; i < files.length; i++) {
+      const name = files[i].name.toLowerCase();
+      if (allowed.some(ext => name.endsWith(ext))) {
+        validImgCount++;
+      }
+      if (name.endsWith('.txt') && (name.includes('classes') || name.includes('class'))) {
+        hasClasses = true;
+      }
+      if (name.endsWith('.yaml') || name.endsWith('.yml')) {
+        hasClasses = true;
+      }
+      if (files[i].webkitRelativePath && files[i].webkitRelativePath.includes('/labels/')) {
+        hasLabels = true;
+      }
+    }
+
+    if (type === 'folder') {
+      let extra = '';
+      if (hasLabels && hasClasses) {
+        extra = ' <span style="display:inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; font-size: 0.72rem; margin-left: 6px;">Dataset Pra-Label Terdeteksi</span>';
+      } else if (hasLabels) {
+        extra = ' <span style="display:inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; font-size: 0.72rem; margin-left: 6px;">Labels Terdeteksi</span>';
+      }
+      let note = '';
+      if (validImgCount > 300) {
+        note = `<div style="margin-top: 4px; font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Mode unggah dataset besar aktif (unlimited parts).</div>`;
+      }
+      statusEl.innerHTML = `✓ Terdeteksi <strong>${validImgCount}</strong> file gambar di dalam folder terpilih.${extra}${note}`;
+    } else {
+      let note = '';
+      if (validImgCount > 300) {
+        note = `<div style="margin-top: 4px; font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Mode unggah dataset besar aktif (unlimited parts).</div>`;
+      }
+      statusEl.innerHTML = `✓ Terpilih <strong>${validImgCount}</strong> file gambar.${note}`;
+    }
+  }
+
+  document.getElementById('new-session-form').addEventListener('submit', function(e) {
+    const submitBtn = document.getElementById('submit-btn');
+    const folderInput = document.getElementById('input-folder');
+    const filesInput = document.getElementById('input-files');
+    const totalFiles = (folderInput.files ? folderInput.files.length : 0) + (filesInput.files ? filesInput.files.length : 0);
+
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.75';
+    submitBtn.style.cursor = 'not-allowed';
+    submitBtn.innerHTML = `
+      <span style="display:inline-block; width:13px; height:13px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin 0.8s linear infinite; margin-right:6px; vertical-align:middle;"></span>
+      Mengunggah &amp; Menyiapkan...
+    `;
+
+    const progressBox = document.getElementById('upload-progress-box');
+    if (progressBox) {
+      progressBox.style.display = 'block';
+      if (totalFiles > 300) {
+        document.getElementById('progress-title').innerText = `Sedang Mengunggah & Memproses ${totalFiles} Berkas...`;
+      }
+    }
+  });
+</script>
+{% endblock %}

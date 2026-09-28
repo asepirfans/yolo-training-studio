@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}Riwayat Training | YOLO Training Studio{% endblock %}
+{% block header_title %}Training History{% endblock %}
+
+{% block content %}
+<style>
+  html, body, .app-shell, .main-wrapper {
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .page-body {
+    height: calc(100vh - 48px) !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 1.25rem 1.5rem !important;
+    box-sizing: border-box !important;
+  }
+  .history-header-fixed {
+    flex-shrink: 0;
+    margin-bottom: 0.85rem;
+  }
+  .history-table-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    overflow: hidden;
+    background: #090d16;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+  }
+  .history-table-container {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+  .history-table-container table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .history-table-container thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #0d1424;
+    box-shadow: 0 1px 0 var(--border-subtle);
+  }
+  .btn-rename-trigger {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .btn-rename-trigger:hover {
+    color: var(--cloud-300);
+    background: rgba(56, 189, 248, 0.15);
+  }
+</style>
+
+<div class="history-header-fixed">
+  <div class="page-hero" style="margin-bottom: 0.85rem;">
+    <div>
+      <h1 class="page-hero-title">Riwayat Pelatihan Model</h1>
+      <p class="page-hero-sub">Daftar seluruh proses training yang pernah dijalankan di studio ini.</p>
+    </div>
+    <a href="{{ url_for('training.new_training') }}" class="btn btn-primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      New Training
+    </a>
+  </div>
+
+  <!-- Filters & Sort -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.75rem;">
+    <!-- Filter Status -->
+    <div style="display: flex; gap: 0.4rem; font-size: 0.78rem;">
+      <a href="{{ url_for('training.history', sort=current_sort) }}" class="btn btn-sm {% if not current_status %}btn-primary{% else %}btn-secondary{% endif %}">Semua</a>
+      <a href="{{ url_for('training.history', status='COMPLETED', sort=current_sort) }}" class="btn btn-sm {% if current_status == 'COMPLETED' %}btn-primary{% else %}btn-secondary{% endif %}">Completed</a>
+      <a href="{{ url_for('training.history', status='RUNNING', sort=current_sort) }}" class="btn btn-sm {% if current_status == 'RUNNING' %}btn-primary{% else %}btn-secondary{% endif %}">Running</a>
+      <a href="{{ url_for('training.history', status='FAILED', sort=current_sort) }}" class="btn btn-sm {% if current_status == 'FAILED' %}btn-primary{% else %}btn-secondary{% endif %}">Failed</a>
+      <a href="{{ url_for('training.history', status='STOPPED', sort=current_sort) }}" class="btn btn-sm {% if current_status == 'STOPPED' %}btn-primary{% else %}btn-secondary{% endif %}">Stopped</a>
+    </div>
+
+    <!-- Sorting Dropdown -->
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <span style="font-size: 0.78rem; color: var(--text-secondary);">Urutkan:</span>
+      <select class="form-select" style="width: auto; padding: 0.25rem 0.6rem; font-size: 0.78rem;" onchange="location = this.value;">
+        <option value="{{ url_for('training.history', status=current_status, sort='latest') }}" {% if current_sort == 'latest' %}selected{% endif %}>Waktu Terbaru</option>
+        <option value="{{ url_for('training.history', status=current_status, sort='highest_map50') }}" {% if current_sort == 'highest_map50' %}selected{% endif %}>mAP50 Tertinggi</option>
+        <option value="{{ url_for('training.history', status=current_status, sort='highest_map5095') }}" {% if current_sort == 'highest_map5095' %}selected{% endif %}>mAP50-95 Tertinggi</option>
+      </select>
+    </div>
+  </div>
+
+  {% if best_run %}
+  <div class="best-run-banner" style="margin-bottom: 0.75rem;">
+    <div style="display: flex; align-items: center; gap: 0.85rem;">
+      <div style="width: 36px; height: 36px; border-radius: 9px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.45); display: flex; align-items: center; justify-content: center; color: #fbbf24; flex-shrink: 0;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+          <path d="M4 22h16"/>
+          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+        </svg>
+      </div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span class="badge badge-best-run" style="font-size: 0.65rem; padding: 2px 7px;">
+            ★ HASIL TRAINING TERBAIK
+          </span>
+          <strong id="best-run-id-text" style="color: #fff; font-size: 0.88rem;">{{ best_run.id }}</strong>
+          <button type="button" class="btn-rename-trigger" onclick="openRenameRunModal('{{ best_run.id }}')" title="Ganti Run ID">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+            </svg>
+          </button>
+        </div>
+        <div style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span>Model: <code style="color: var(--cloud-200); background: rgba(255,255,255,0.05); padding: 1px 5px; border-radius: 3px;">{{ best_run.model_name }}</code></span>
+          <span>• mAP50: <strong style="color: #34d399;">{{ best_run.best_map50 or '-' }}</strong></span>
+          <span>• mAP50-95: <strong style="color: #fde047;">{{ best_run.best_map5095 or '-' }}</strong></span>
+          <span>• Dataset: {{ best_run.dataset.name if best_run.dataset else '-' }}</span>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 6px;">
+      <a href="{{ url_for('results.detail', run_id=best_run.id) }}" class="btn btn-sm" style="background: rgba(245, 158, 11, 0.15); color: #fde047; border: 1px solid rgba(245, 158, 11, 0.4);">
+        Rincian Evaluasi &rarr;
+      </a>
+      <a href="{{ url_for('testing.index', run_id=best_run.id) }}" class="btn btn-primary btn-sm">
+        Test Model Ini
+      </a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Scrollable Table Card -->
+<div class="history-table-card">
+  <div class="history-table-container">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Run ID (Dapat Diedit)</th>
+          <th>Dataset</th>
+          <th>Model</th>
+          <th>Epoch</th>
+          <th>Status</th>
+          <th>Best mAP50</th>
+          <th>Best mAP50-95</th>
+          <th>Durasi</th>
+          <th>Waktu Mulai</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if runs %}
+          {% for r in runs %}
+          <tr class="{% if best_run_id and r.id == best_run_id %}best-run-row{% endif %}">
+            <td>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <strong id="run-id-text-{{ r.id }}" style="color: #fff; font-size: 0.85rem;">{{ r.id }}</strong>
+                <button type="button" class="btn-rename-trigger" onclick="openRenameRunModal('{{ r.id }}')" title="Ganti Run ID">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                  </svg>
+                </button>
+                {% if best_run_id and r.id == best_run_id %}
+                  <span class="badge badge-best-run" title="Hasil Performa Training Terbaik" style="font-size: 0.62rem; padding: 1px 5px;">
+                    ★ TERBAIK
+                  </span>
+                {% endif %}
+              </div>
+              <div style="font-size: 0.7rem; color: var(--cloud-300); margin-top: 1px;">
+                {{ r.project.name if r.project else 'Project Utama' }}
+              </div>
+            </td>
+            <td>{{ r.dataset.name if r.dataset else '-' }}</td>
+            <td>
+              <code style="background: rgba(255, 255, 255, 0.05); color: var(--cloud-200); padding: 2px 6px; border-radius: 4px; font-size: 0.78rem;">{{ r.model_name }}</code>
+            </td>
+            <td>{{ r.current_epoch }} / {{ r.total_epochs }}</td>
+            <td>
+              {% if r.status == 'COMPLETED' %}
+                <span class="badge badge-success">Completed</span>
+              {% elif r.status == 'RUNNING' %}
+                <span class="badge badge-running">Running</span>
+              {% elif r.status == 'STARTING' %}
+                <span class="badge badge-running">Starting</span>
+              {% elif r.status == 'FAILED' %}
+                <span class="badge badge-danger">Failed</span>
+              {% elif r.status == 'STOPPED' %}
+                <span class="badge badge-warning">Stopped</span>
+              {% elif r.status == 'INTERRUPTED' %}
+                <span class="badge badge-danger">Interrupted</span>
+              {% else %}
+                <span class="badge badge-neutral">{{ r.status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <strong style="{% if best_run_id and r.id == best_run_id %}color: #34d399;{% endif %}">
+                {{ r.best_map50 if r.best_map50 is not none else '-' }}
+              </strong>
+            </td>
+            <td>
+              <strong style="{% if best_run_id and r.id == best_run_id %}color: #fde047;{% endif %}">
+                {{ r.best_map5095 if r.best_map5095 is not none else '-' }}
+              </strong>
+            </td>
+            <td>{{ r.get_formatted_duration() }}</td>
+            <td style="color: var(--text-muted); font-size: 0.78rem;">{{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '-' }}</td>
+            <td>
+              <div style="display: flex; gap: 0.35rem; align-items: center;">
+                {% if r.status in ['RUNNING', 'STARTING'] %}
+                  <a href="{{ url_for('training.monitor', run_id=r.id) }}" class="btn btn-primary btn-sm">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polygon points="10 8 16 12 10 16 10 8"/>
+                    </svg>
+                    Monitor
+                  </a>
+                {% else %}
+                  <a href="{{ url_for('results.detail', run_id=r.id) }}" class="btn btn-secondary btn-sm">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="20" x2="18" y2="10"/>
+                      <line x1="12" y1="20" x2="12" y2="4"/>
+                      <line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    Results
+                  </a>
+                {% endif %}
+
+                <!-- Manual Best Run Flag Toggle -->
+                <form action="{{ url_for('training.toggle_best_run', run_id=r.id) }}" method="POST" style="display: inline;">
+                  <button type="submit" class="btn btn-sm {% if r.is_best %}badge-best-run{% else %}btn-secondary{% endif %}" 
+                          title="{% if r.is_best %}Klik untuk membatalkan flag hasil terbaik{% else %}Tandai run ini sebagai hasil terbaik secara manual{% endif %}" 
+                          style="padding: 4px 8px; font-size: 0.72rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="{% if r.is_best %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                    {% if r.is_best %}Terbaik{% else %}Set Terbaik{% endif %}
+                  </button>
+                </form>
+
+                <form action="{{ url_for('training.delete_run', run_id=r.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Hapus riwayat training {{ r.id }} beserta file outputnya?');">
+                  <button type="submit" class="btn btn-danger btn-sm" title="Hapus Riwayat">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    Hapus
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
+              Tidak ada riwayat training yang cocok dengan filter.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal Ganti Run ID -->
+<div id="modal-rename-run" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); z-index: 1200; align-items: center; justify-content: center;">
+  <div class="card" style="width: 100%; max-width: 440px; margin: 0; border: 1px solid var(--border-hover); box-shadow: 0 20px 40px rgba(0,0,0,0.85); background: #0c121e;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem;">
+      <div style="font-weight: 700; color: #fff; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+        </svg>
+        <span>Ganti Run ID Training</span>
+      </div>
+      <button type="button" onclick="closeRenameRunModal()" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer; line-height: 1;">&times;</button>
+    </div>
+    <div class="card-body" style="padding: 1.25rem;">
+      <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Run ID Saat Ini: <strong id="rename-modal-old-run-id" style="color: var(--cloud-300); font-family: monospace;">-</strong>
+      </div>
+      <div class="form-group" style="margin-bottom: 1.25rem;">
+        <label class="form-label" for="input-new-run-id" style="font-size: 0.8rem; margin-bottom: 0.35rem;">Run ID Baru</label>
+        <input type="text" id="input-new-run-id" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="Contoh: run_yolo_botol_v1" maxlength="64" />
+        <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 5px;">
+          Gunakan huruf, angka, garis bawah (_), atau tanda hubung (-). Folder penyimpanan output akan otomatis disinkronkan.
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeRenameRunModal()">Batal</button>
+        <button type="button" id="btn-submit-rename-run" class="btn btn-primary btn-sm" onclick="submitRenameRunId()">
+          Simpan Run ID
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentOldRunId = null;
+
+function openRenameRunModal(runId) {
+  currentOldRunId = runId;
+  document.getElementById('rename-modal-old-run-id').innerText = runId;
+  const input = document.getElementById('input-new-run-id');
+  input.value = runId || '';
+  document.getElementById('modal-rename-run').style.display = 'flex';
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 50);
+}
+
+function closeRenameRunModal() {
+  document.getElementById('modal-rename-run').style.display = 'none';
+  currentOldRunId = null;
+}
+
+// Close modal on Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('modal-rename-run').style.display === 'flex') {
+    closeRenameRunModal();
+  }
+});
+
+async function submitRenameRunId() {
+  if (!currentOldRunId) return;
+  const input = document.getElementById('input-new-run-id');
+  const newId = (input.value || '').trim();
+  if (!newId) {
+    alert("Run ID tidak boleh kosong!");
+    return;
+  }
+  const btn = document.getElementById('btn-submit-rename-run');
+  btn.disabled = true;
+  btn.innerText = "Menyimpan...";
+
+  try {
+    const res = await fetch(`/training/${currentOldRunId}/rename_run_id`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_run_id: newId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      window.location.reload();
+    } else {
+      alert(data.error || "Gagal mengubah Run ID");
+      btn.disabled = false;
+      btn.innerText = "Simpan Run ID";
+    }
+  } catch (err) {
+    alert("Terjadi kesalahan koneksi saat mengubah Run ID.");
+    btn.disabled = false;
+    btn.innerText = "Simpan Run ID";
+  }
+}
+</script>
+{% endblock %}

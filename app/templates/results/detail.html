@@ -1,0 +1,609 @@
+{% extends "base.html" %}
+
+{% block title %}Hasil Evaluasi {{ run.id }} | YOLO Training Studio{% endblock %}
+{% block header_title %}Hasil Evaluasi Training: {{ run.id }}{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.35rem; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <h1 class="page-hero-title" style="margin-bottom: 0;">{{ run.id }}</h1>
+        <button type="button" onclick="openRenameRunModal('{{ run.id }}')" title="Ganti Run ID Ini" style="background: transparent; border: none; color: var(--cloud-400); cursor: pointer; padding: 2px 5px; display: inline-flex; align-items: center; border-radius: 4px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+          </svg>
+        </button>
+        <span class="badge {% if run.status == 'COMPLETED' %}badge-success{% elif run.status == 'FAILED' %}badge-danger{% else %}badge-neutral{% endif %}">
+          {{ run.status }}
+        </span>
+        {% if is_best_run %}
+          <span class="badge badge-best-run" style="font-size: 0.75rem; padding: 3px 10px;">
+            ★ HASIL TRAINING TERBAIK
+          </span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="page-hero-sub" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      <span>Model: <code style="color: var(--cloud-200); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">{{ run.model_name }}</code></span>
+      <span>| Dataset: <strong>{{ run.dataset.name if run.dataset else '-' }}</strong> | Durasi: <strong>{{ run.get_formatted_duration() }}</strong></span>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <a href="{{ url_for('training.history') }}" class="btn btn-secondary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+      </svg>
+      Kembali ke Riwayat
+    </a>
+    <a href="{{ url_for('testing.index', run_id=run.id) }}" class="btn btn-primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="22" y1="12" x2="18" y2="12"/>
+        <line x1="6" y1="12" x2="2" y2="12"/>
+        <line x1="12" y1="6" x2="12" y2="2"/>
+        <line x1="12" y1="22" x2="12" y2="18"/>
+      </svg>
+      Test Model Ini
+    </a>
+    <a href="{{ url_for('training.monitor', run_id=run.id) }}" class="btn btn-secondary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"/>
+        <line x1="12" y1="19" x2="20" y2="19"/>
+      </svg>
+      Log Console
+    </a>
+    <form action="{{ url_for('training.toggle_best_run', run_id=run.id) }}" method="POST" style="display: inline;">
+      <button type="submit" class="btn {% if is_best_run %}badge-best-run{% else %}btn-secondary{% endif %}" title="Toggle Flag Model Terbaik Secara Manual" style="padding: 0.5rem 0.85rem; cursor: pointer;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="{% if is_best_run %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        {% if is_best_run %}★ Flag Terbaik (Aktif){% else %}☆ Jadikan Model Terbaik{% endif %}
+      </button>
+    </form>
+    <form action="{{ url_for('training.delete_run', run_id=run.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Hapus seluruh riwayat dan file output training ini?');">
+      <button type="submit" class="btn btn-danger">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        Hapus Run
+      </button>
+    </form>
+  </div>
+</div>
+
+{% if is_best_run %}
+<div class="best-run-banner">
+  <div style="display: flex; align-items: center; gap: 1rem;">
+    <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); display: flex; align-items: center; justify-content: center; color: #fbbf24; flex-shrink: 0;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+        <path d="M4 22h16"/>
+        <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+        <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+        <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+      </svg>
+    </div>
+    <div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="badge badge-best-run" style="font-size: 0.72rem; padding: 3px 9px;">★ RUN HASIL TRAINING TERBAIK</span>
+        <span style="font-size: 0.85rem; font-weight: 700; color: #fff;">Performa Tertinggi Workspace</span>
+      </div>
+      <p style="font-size: 0.8rem; color: #fde047; margin: 4px 0 0; opacity: 0.95;">
+        Pelatihan ini mencatatkan skor akurasi tertinggi (mAP50: <strong>{{ run.best_map50 }}</strong>, mAP50-95: <strong>{{ run.best_map5095 }}</strong>) di antara seluruh hasil training.
+      </p>
+    </div>
+  </div>
+  <div>
+    <a href="{{ url_for('testing.index', run_id=run.id) }}" class="btn btn-primary btn-sm" style="box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);">
+      Uji Model Ini di Playground &rarr;
+    </a>
+  </div>
+</div>
+{% endif %}
+
+<!-- 1. Result Summary Cards (PRD Section 36) -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-label">Best mAP50</div>
+    <div class="metric-value" style="color: #34d399;">{{ metrics.best.map50 }}</div>
+    <div class="metric-sub">Mean Average Precision @ 0.5</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Best mAP50-95</div>
+    <div class="metric-value" style="color: #60a5fa;">{{ metrics.best.map5095 }}</div>
+    <div class="metric-sub">mAP rentang ketat IoU</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Precision / Recall (Best)</div>
+    <div class="metric-value">{{ metrics.best.precision }} / {{ metrics.best.recall }}</div>
+    <div class="metric-sub">Dicapai pada Epoch {{ metrics.best.epoch }}</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Total Epochs Selesai</div>
+    <div class="metric-value">{{ run.current_epoch }} <span style="font-size: 0.9rem; font-weight: normal;">/ {{ run.total_epochs }}</span></div>
+    <div class="metric-sub">Waktu: {{ run.get_formatted_duration() }}</div>
+  </div>
+</div>
+
+<!-- 2. Model Weights Section (PRD Section 40) -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Model Weights Output (.pt)</div>
+  </div>
+  <div class="card-body">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+      <!-- best.pt -->
+      <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid {% if is_best_run %}rgba(245, 158, 11, 0.55){% else %}var(--glass-border){% endif %}; border-radius: var(--radius-md); padding: 1.25rem; {% if is_best_run %}box-shadow: 0 0 18px rgba(245, 158, 11, 0.12);{% endif %}">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.1rem; font-weight: 700; color: #fff;">best.pt</span>
+            {% if is_best_run %}
+              <span class="badge badge-best-run">★ Best Model Studio</span>
+            {% else %}
+              <span class="badge badge-success">Model Terbaik Run</span>
+            {% endif %}
+          </div>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">{{ weights.best_size_mb }} MB</span>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+          Bobot model dengan mAP tertinggi yang dicapai selama proses training. Siap digunakan untuk inferensi produksi.
+        </p>
+        {% if weights.best_available %}
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <a href="{{ url_for('testing.index', run_id=run.id) }}" class="btn btn-primary btn-sm">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8"/>
+              </svg>
+              Uji Model di Playground
+            </a>
+            <a href="{{ url_for('results.download_weight', run_id=run.id, weight_type='best') }}" class="btn btn-secondary btn-sm">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Unduh best.pt
+            </a>
+            <button onclick="copyToClipboard('{{ weights.best_path }}')" class="btn btn-secondary btn-sm">
+              Salin Path
+            </button>
+          </div>
+        {% else %}
+          <div style="font-size: 0.8rem; color: var(--text-muted);">File best.pt belum tersedia.</div>
+        {% endif %}
+      </div>
+
+      <!-- last.pt -->
+      <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: var(--radius-md); padding: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.1rem; font-weight: 700; color: #fff;">last.pt</span>
+            <span class="badge badge-neutral">Checkpoint Terakhir</span>
+          </div>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">{{ weights.last_size_mb }} MB</span>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+          Bobot model pada epoch paling akhir. Berguna untuk me-resume training jika proses terputus.
+        </p>
+        {% if weights.last_available %}
+          <div style="display: flex; gap: 0.5rem;">
+            <a href="{{ url_for('results.download_weight', run_id=run.id, weight_type='last') }}" class="btn btn-secondary btn-sm">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Unduh last.pt
+            </a>
+            <button onclick="copyToClipboard('{{ weights.last_path }}')" class="btn btn-secondary btn-sm">
+              Salin Path File
+            </button>
+          </div>
+        {% else %}
+          <div style="font-size: 0.8rem; color: var(--text-muted);">File last.pt belum tersedia.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. Interactive Performance Curves Explorer (Chart.js) -->
+{% if metrics.epochs and metrics.epochs|length > 0 %}
+<div class="card">
+  <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+    <div class="card-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      Analisis Kurva Performa Interaktif (Per-Epoch Analytics)
+    </div>
+    <div style="display: flex; gap: 0.35rem; align-items: center;">
+      <button id="btn-chart-map" class="btn btn-sm btn-primary" onclick="switchChartMode('map')">mAP Curves</button>
+      <button id="btn-chart-pr" class="btn btn-sm btn-secondary" onclick="switchChartMode('pr')">Precision & Recall</button>
+      <button id="btn-chart-loss" class="btn btn-sm btn-secondary" onclick="switchChartMode('loss')">Loss Curves</button>
+    </div>
+  </div>
+  <div class="card-body" style="height: 320px; padding: 1.25rem;">
+    <canvas id="interactiveResultsChart"></canvas>
+  </div>
+</div>
+{% endif %}
+
+<!-- 4. Result Evaluation Images & Curves (PRD Section 37 & 39) -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Grafik Evaluasi & Confusion Matrix (Klik untuk Memperbesar)</div>
+  </div>
+  <div class="card-body">
+    <div class="gallery-grid">
+      {% if artifacts.summary_chart %}
+        <div class="gallery-card" onclick="openModal('{{ url_for('results.serve_output_file', run_id=run.id, filename=artifacts.summary_chart) }}', 'Training Summary Results')">
+          <img class="gallery-img" src="{{ url_for('results.serve_output_file', run_id=run.id, filename=artifacts.summary_chart) }}" alt="Summary Results">
+          <div class="gallery-footer">results.png (Loss & Metrics)</div>
+        </div>
+      {% endif %}
+
+      {% if artifacts.confusion_matrix %}
+        <div class="gallery-card" onclick="openModal('{{ url_for('results.serve_output_file', run_id=run.id, filename=artifacts.confusion_matrix) }}', 'Confusion Matrix')">
+          <img class="gallery-img" src="{{ url_for('results.serve_output_file', run_id=run.id, filename=artifacts.confusion_matrix) }}" alt="Confusion Matrix">
+          <div class="gallery-footer">confusion_matrix.png</div>
+        </div>
+      {% endif %}
+
+      {% if artifacts.confusion_matrix_normalized %}
+        <div class="gallery-card" onclick="openModal('{{ url_for('results.serve_output_file', run_id=run.id, filename=artifacts.confusion_matrix_normalized) }}', 'Normalized Confusion Matrix')">
+          <img class="gallery-img" src="{{ url_for('results.serve_output_file', run_id=run.id, filename=artifacts.confusion_matrix_normalized) }}" alt="Normalized Confusion Matrix">
+          <div class="gallery-footer">confusion_matrix_normalized.png</div>
+        </div>
+      {% endif %}
+
+      {% for c in artifacts.curves %}
+        <div class="gallery-card" onclick="openModal('{{ url_for('results.serve_output_file', run_id=run.id, filename=c.filename) }}', '{{ c.title }}')">
+          <img class="gallery-img" src="{{ url_for('results.serve_output_file', run_id=run.id, filename=c.filename) }}" alt="{{ c.title }}">
+          <div class="gallery-footer">{{ c.title }} ({{ c.filename }})</div>
+        </div>
+      {% endfor %}
+
+      {% for lbl in artifacts.labels %}
+        <div class="gallery-card" onclick="openModal('{{ url_for('results.serve_output_file', run_id=run.id, filename=lbl) }}', 'Dataset Label Distribution')">
+          <img class="gallery-img" src="{{ url_for('results.serve_output_file', run_id=run.id, filename=lbl) }}" alt="Labels">
+          <div class="gallery-footer">{{ lbl }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- 4. Validation Predictions Gallery (PRD Section 38) -->
+{% if artifacts.val_batches %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Validation Prediction Samples (Batch Predictions)</div>
+  </div>
+  <div class="card-body">
+    <div class="gallery-grid">
+      {% for vb in artifacts.val_batches %}
+        <div class="gallery-card" onclick="openModal('{{ url_for('results.serve_output_file', run_id=run.id, filename=vb) }}', '{{ vb }}')">
+          <img class="gallery-img" src="{{ url_for('results.serve_output_file', run_id=run.id, filename=vb) }}" alt="{{ vb }}">
+          <div class="gallery-footer">{{ vb }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 5. Training Config Snapshot (PRD Section 41) -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Training Configuration Snapshot (config.json)</div>
+  </div>
+  <div class="card-body" style="padding: 0;">
+    <pre style="background: #000; padding: 1.25rem; font-size: 0.8rem; color: #a1a1aa; overflow-x: auto; font-family: monospace;">{{ run.config_json }}</pre>
+  </div>
+</div>
+
+<!-- Image Modal Viewer (PRD Section 39) -->
+<div id="image-modal" class="modal-overlay" onclick="closeModal()">
+  <div class="modal-body" onclick="event.stopPropagation()">
+    <span class="modal-close" onclick="closeModal()">&times;</span>
+    <img id="modal-img-element" class="modal-img" src="" alt="Zoomed Artifact">
+    <div id="modal-title" style="margin-top: 0.5rem; text-align: center; font-size: 0.85rem; color: #e4e4e7;"></div>
+  </div>
+</div>
+
+<script>
+  function openModal(src, title) {
+    document.getElementById('modal-img-element').src = src;
+    document.getElementById('modal-title').innerText = title;
+    document.getElementById('image-modal').classList.add('active');
+  }
+
+  function closeModal() {
+    document.getElementById('image-modal').classList.remove('active');
+  }
+
+  function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert("Path file berhasil disalin ke clipboard!");
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  // Interactive Chart.js Logic
+  const epochsData = {{ epochs_json | safe }};
+  let interactiveChart = null;
+  let currentChartMode = 'map';
+
+  function getDatasets(mode) {
+    if (mode === 'map') {
+      return [
+        {
+          label: 'mAP50 (IoU 0.5)',
+          data: epochsData.map(e => e.map50),
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.1)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#ffffff'
+        },
+        {
+          label: 'mAP50-95 (IoU 0.5:0.95)',
+          data: epochsData.map(e => e.map5095),
+          borderColor: '#34d399',
+          backgroundColor: 'rgba(52, 211, 153, 0.08)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#ffffff'
+        }
+      ];
+    } else if (mode === 'pr') {
+      return [
+        {
+          label: 'Precision',
+          data: epochsData.map(e => e.precision),
+          borderColor: '#60a5fa',
+          backgroundColor: 'rgba(96, 165, 250, 0.1)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#ffffff'
+        },
+        {
+          label: 'Recall',
+          data: epochsData.map(e => e.recall),
+          borderColor: '#a78bfa',
+          backgroundColor: 'rgba(167, 139, 250, 0.08)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#ffffff'
+        }
+      ];
+    } else {
+      return [
+        {
+          label: 'Train Box Loss',
+          data: epochsData.map(e => e.train_box_loss),
+          borderColor: '#fbbf24',
+          backgroundColor: 'rgba(251, 191, 36, 0.1)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#ffffff'
+        },
+        {
+          label: 'Val Box Loss',
+          data: epochsData.map(e => e.val_box_loss),
+          borderColor: '#f87171',
+          backgroundColor: 'rgba(248, 113, 113, 0.08)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#ffffff'
+        },
+        {
+          label: 'Train Cls Loss',
+          data: epochsData.map(e => e.train_cls_loss),
+          borderColor: '#c084fc',
+          tension: 0.35,
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHoverRadius: 4
+        }
+      ];
+    }
+  }
+
+  function initInteractiveChart() {
+    const canvas = document.getElementById('interactiveResultsChart');
+    if (!canvas || !epochsData || epochsData.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    const labels = epochsData.map(e => `Ep ${e.epoch}`);
+
+    interactiveChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: getDatasets(currentChartMode)
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#94a3b8', font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 11 } }
+          },
+          y: {
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#94a3b8', font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 11 } }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              color: '#f1f5f9',
+              usePointStyle: true,
+              pointStyle: 'circle',
+              boxWidth: 8,
+              boxHeight: 8,
+              font: { family: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', size: 12 }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            borderWidth: 1,
+            titleColor: '#ffffff',
+            bodyColor: '#cbd5e1',
+            padding: 10,
+            cornerRadius: 8,
+            usePointStyle: true
+          }
+        }
+      }
+    });
+  }
+
+  function switchChartMode(mode) {
+    currentChartMode = mode;
+    ['map', 'pr', 'loss'].forEach(m => {
+      const btn = document.getElementById(`btn-chart-${m}`);
+      if (btn) btn.className = m === mode ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    });
+    if (interactiveChart) {
+      interactiveChart.destroy();
+      initInteractiveChart();
+    }
+  }
+
+  // Auto initialize chart if data exists
+  initInteractiveChart();
+
+  let currentOldRunId = null;
+  function openRenameRunModal(runId) {
+    currentOldRunId = runId;
+    document.getElementById('rename-modal-old-run-id').innerText = runId;
+    const input = document.getElementById('input-new-run-id');
+    input.value = runId || '';
+    document.getElementById('modal-rename-run').style.display = 'flex';
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 50);
+  }
+
+  function closeRenameRunModal() {
+    document.getElementById('modal-rename-run').style.display = 'none';
+    currentOldRunId = null;
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('modal-rename-run').style.display === 'flex') {
+      closeRenameRunModal();
+    }
+  });
+
+  async function submitRenameRunId() {
+    if (!currentOldRunId) return;
+    const input = document.getElementById('input-new-run-id');
+    const newId = (input.value || '').trim();
+    if (!newId) {
+      alert("Run ID tidak boleh kosong");
+      return;
+    }
+    const btn = document.getElementById('btn-submit-rename-run');
+    btn.disabled = true;
+    btn.innerText = "Menyimpan...";
+
+    try {
+      const res = await fetch(`/training/${currentOldRunId}/rename_run_id`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_run_id: newId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.redirect_url) {
+          window.location.href = data.redirect_url;
+        } else {
+          window.location.reload();
+        }
+      } else {
+        alert(data.error || "Gagal mengubah Run ID");
+        btn.disabled = false;
+        btn.innerText = "Simpan Run ID";
+      }
+    } catch (err) {
+      alert("Terjadi kesalahan koneksi saat mengubah Run ID.");
+      btn.disabled = false;
+      btn.innerText = "Simpan Run ID";
+    }
+  }
+</script>
+
+<!-- Modal Ubah Run ID -->
+<div id="modal-rename-run" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); z-index: 1200; align-items: center; justify-content: center;">
+  <div class="card" style="width: 100%; max-width: 440px; margin: 0; border: 1px solid var(--border-hover); box-shadow: 0 20px 40px rgba(0,0,0,0.85); background: #0c121e;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem;">
+      <div style="font-weight: 700; color: #fff; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+        </svg>
+        <span>Ganti Run ID Training</span>
+      </div>
+      <button type="button" onclick="closeRenameRunModal()" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer; line-height: 1;">&times;</button>
+    </div>
+    <div class="card-body" style="padding: 1.25rem;">
+      <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Run ID Saat Ini: <strong id="rename-modal-old-run-id" style="color: var(--cloud-300); font-family: monospace;">-</strong>
+      </div>
+      <div class="form-group" style="margin-bottom: 1.25rem;">
+        <label class="form-label" for="input-new-run-id" style="font-size: 0.8rem; margin-bottom: 0.35rem;">Run ID Baru</label>
+        <input type="text" id="input-new-run-id" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="Contoh: run_yolo_botol_v1" maxlength="64" />
+        <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 5px;">
+          Gunakan huruf, angka, garis bawah (_), atau tanda hubung (-). Folder penyimpanan output akan otomatis disinkronkan.
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeRenameRunModal()">Batal</button>
+        <button type="button" id="btn-submit-rename-run" class="btn btn-primary btn-sm" onclick="submitRenameRunId()">
+          Simpan Run ID
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

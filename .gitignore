@@ -1,0 +1,51 @@
+# ==========================================
+# YOLO Training Studio - Git Ignore
+# ==========================================
+
+# 1. Byte-compiled / cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 2. Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+
+# 3. Model Weights & Pretrained PyTorch files
+# (YOLO otomatis mendownload bobot ini saat pertama kali dijalankan)
+*.pt
+*.pth
+*.onnx
+*.engine
+weights/
+
+# 4. Storage Runtime & Database
+# (Folder ini berisi dataset upload, hasil runs training, dan file inferensi)
+storage/datasets/*
+storage/runs/*
+storage/labeling/*
+storage/models/*
+storage/temp_inference/*
+storage/*.db
+storage/*.sqlite3
+!storage/**/.gitkeep
+
+# 5. Logs & Service outputs
+logs/*
+!logs/.gitkeep
+*.log
+
+# 6. Local SSL Certificates (Private Keys)
+certs/*.pem
+certs/*.key
+certs/*.crt
+
+# 7. OS & Editor configs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

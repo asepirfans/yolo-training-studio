@@ -1,0 +1,2436 @@
+{% extends "base.html" %}
+
+{% block title %}Editor Labeling: {{ session.name }} | YOLO Training Studio{% endblock %}
+{% block header_title %}Labeling Studio: {{ session.name }}{% endblock %}
+
+{% block content %}
+<style>
+  /* Lock Viewport Single-Page 100vh with Clean Spacing */
+  html, body {
+    height: 100vh !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+  }
+  .app-shell {
+    height: 100vh !important;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow: hidden !important;
+  }
+  .main-wrapper {
+    height: 100vh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+  .main-topbar {
+    display: none !important;
+  }
+  .page-body {
+    flex: 1 !important;
+    min-height: 0 !important;
+    padding: 0.75rem 1.25rem !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+  }
+
+  /* Spacious 3-Column Studio Grid Layout */
+  #editor-container {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 260px 1fr 340px;
+    gap: 1rem;
+    overflow: hidden;
+  }
+
+  /* Thumbnail Items */
+  .thumb-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-bottom: 6px;
+  }
+  .thumb-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--border-hover);
+    transform: translateX(2px);
+  }
+  .thumb-item.active {
+    background: rgba(56, 189, 248, 0.14);
+    border-color: rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.1);
+  }
+
+  /* Canvas Stage */
+  #canvas-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #050811;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-card);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.7);
+  }
+  #annotation-canvas {
+    cursor: crosshair;
+    display: block;
+    box-shadow: 0 6px 30px rgba(0, 0, 0, 0.7);
+    border-radius: 2px;
+  }
+  #annotation-canvas.mode-select {
+    cursor: default;
+  }
+  #annotation-canvas.mode-placement {
+    cursor: copy !important;
+  }
+
+  /* Class Item Card */
+  .class-item-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    transition: all 0.15s ease;
+    cursor: pointer;
+  }
+  .class-item-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--border-hover);
+  }
+  .class-item-card.active {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: #38bdf8;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.15);
+  }
+
+  /* Crop Item Card */
+  .crop-card {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    transition: all 0.15s ease;
+    cursor: grab;
+  }
+  .crop-card:hover {
+    border-color: var(--cloud-400);
+    background: rgba(15, 23, 42, 0.9);
+  }
+
+  /* Floating Placement Bar */
+  #crop-placement-bar {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0f172a;
+    border: 1px solid var(--cloud-400);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.75);
+    padding: 6px 14px;
+    border-radius: var(--radius-md);
+    display: none;
+    align-items: center;
+    gap: 12px;
+    z-index: 50;
+    font-size: 0.76rem;
+  }
+
+  /* Custom Toast Container & Cards */
+  #toast-container {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 999999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .custom-toast {
+    pointer-events: auto;
+    min-width: 320px;
+    max-width: 440px;
+    background: #0f172a;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    animation: toastPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.2s ease;
+  }
+  .custom-toast.toast-success {
+    border-color: rgba(34, 197, 94, 0.55);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%);
+    box-shadow: 0 10px 30px rgba(34, 197, 94, 0.15);
+  }
+  .custom-toast.toast-error {
+    border-color: rgba(239, 68, 68, 0.6);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%);
+    box-shadow: 0 10px 30px rgba(239, 68, 68, 0.18);
+  }
+  .custom-toast.toast-warning {
+    border-color: rgba(245, 158, 11, 0.6);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%);
+    box-shadow: 0 10px 30px rgba(245, 158, 11, 0.15);
+  }
+  .custom-toast.toast-info {
+    border-color: rgba(56, 189, 248, 0.6);
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%);
+    box-shadow: 0 10px 30px rgba(56, 189, 248, 0.15);
+  }
+  .toast-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+  .toast-content {
+    flex: 1;
+    min-width: 0;
+  }
+  .toast-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 2px;
+  }
+  .toast-message {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .toast-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+  }
+  .toast-close:hover {
+    color: #fff;
+  }
+  @keyframes toastPop {
+    from { transform: translateX(40px) scale(0.95); opacity: 0; }
+    to { transform: translateX(0) scale(1); opacity: 1; }
+  }
+</style>
+
+<!-- Floating Custom Toast Notification Stack -->
+<div id="toast-container"></div>
+
+<!-- Custom Styled Confirmation Modal (Replaces browser native confirm()) -->
+<div id="modal-confirm" class="modal-overlay" style="display: none; z-index: 999998;">
+  <div class="card" style="max-width: 440px; width: 92%; margin: auto; background: #0c121e; border: 1px solid var(--accent-border); box-shadow: 0 24px 60px rgba(0,0,0,0.85); animation: toastPop 0.2s cubic-bezier(0.16,1,0.3,1);" onclick="event.stopPropagation()">
+    <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); padding: 0.85rem 1.25rem;">
+      <div id="confirm-modal-title" class="card-title" style="font-size: 0.95rem; font-weight: 700; color: #fff;">Konfirmasi Tindakan</div>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="resolveConfirm(false)">&times;</button>
+    </div>
+    <div class="card-body" style="padding: 1.25rem;">
+      <p id="confirm-modal-message" style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1.5rem; white-space: pre-line;"></p>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" id="confirm-modal-btn-cancel" class="btn btn-secondary btn-sm" onclick="resolveConfirm(false)">Batal</button>
+        <button type="button" id="confirm-modal-btn-ok" class="btn btn-primary btn-sm" onclick="resolveConfirm(true)">Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================================================================
+     1. SPACIOUS STUDIO TOPBAR
+     ============================================================================== -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-shrink: 0; padding: 0.55rem 0.85rem; background: rgba(255,255,255,0.018); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);">
+  <!-- Left info -->
+  <div style="display: flex; align-items: center; gap: 14px;">
+    <a href="{{ url_for('labeling.index') }}" class="btn btn-secondary btn-sm" title="Kembali ke Daftar Sesi" style="gap: 6px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+      </svg>
+      Sesi
+    </a>
+    <div>
+      <div style="font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px;">
+        <span>{{ session.name }}</span>
+        <span id="header-progress-badge" class="badge badge-running" style="font-size: 0.68rem; padding: 2px 8px;">
+          Memuat...
+        </span>
+      </div>
+      <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
+        Project: <strong style="color: var(--cloud-300);">{{ session.project.name if session.project else 'Project Utama' }}</strong> • 
+        Format: <code style="color: #fff; font-size: 0.7rem;">YOLO BBox (.txt)</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center Navigation -->
+  <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+    <button type="button" class="btn btn-secondary btn-sm" onclick="navImage(-1)" title="Gambar Sebelumnya (A / Panah Kiri)" style="padding: 3px 8px;">
+      &larr; Prev
+    </button>
+    <span id="image-counter-text" style="font-size: 0.78rem; font-weight: 600; color: #fff; padding: 0 8px; min-width: 60px; text-align: center;">
+      0 / 0
+    </span>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="navImage(1)" title="Gambar Selanjutnya (D / Panah Kanan)" style="padding: 3px 8px;">
+      Next &rarr;
+    </button>
+    <span style="width: 1px; height: 16px; background: var(--border-subtle); margin: 0 4px;"></span>
+    <button type="button" class="btn btn-danger btn-sm" onclick="deleteCurrentImage()" title="Hapus Gambar ini dari Sesi" style="padding: 3px 8px; font-size: 0.7rem; gap: 4px;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+      </svg>
+      Hapus Gambar
+    </button>
+  </div>
+
+  <!-- Right Actions -->
+  <div style="display: flex; align-items: center; gap: 10px;">
+    <!-- Automatic Labeling Button -->
+    <button type="button" class="btn btn-sm btn-secondary" onclick="openAutoLabelModal()" style="border-color: rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.1); color: #c084fc; gap: 6px;" title="Labeling Otomatis Menggunakan Model YOLO (.pt)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      <strong>Auto-Label Model</strong>
+    </button>
+
+    <!-- Split & Export Dataset Button -->
+    <button type="button" class="btn btn-primary btn-sm" onclick="openSplitModal()" style="box-shadow: 0 0 14px rgba(56, 189, 248, 0.25); gap: 6px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="16 3 21 3 21 8"/>
+        <line x1="4" y1="20" x2="21" y2="3"/>
+        <polyline points="21 16 21 21 16 21"/>
+        <line x1="15" y1="15" x2="21" y2="21"/>
+        <line x1="4" y1="4" x2="9" y2="9"/>
+      </svg>
+      Split &amp; Export Dataset
+    </button>
+  </div>
+</div>
+
+<!-- ==============================================================================
+     2. MAIN 3-COLUMN STUDIO WORKSPACE
+     ============================================================================== -->
+<div id="editor-container">
+  <!-- COLUMN 1: Image Explorer & Thumbnail List -->
+  <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden;">
+    <div class="card-header" style="padding: 0.75rem 1rem;">
+      <span class="card-title" style="font-size: 0.82rem;">Daftar Gambar</span>
+      <span id="img-filter-count" style="font-size: 0.72rem; color: var(--text-muted);">0 items</span>
+    </div>
+    
+    <!-- Filter options -->
+    <div style="padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 6px;">
+      <button type="button" id="flt-all" class="btn btn-sm btn-primary" onclick="setImageFilter('all')" style="flex: 1; padding: 3px 6px; font-size: 0.7rem;">Semua</button>
+      <button type="button" id="flt-unlabeled" class="btn btn-sm btn-secondary" onclick="setImageFilter('unlabeled')" style="flex: 1; padding: 3px 6px; font-size: 0.7rem;">Belum</button>
+      <button type="button" id="flt-labeled" class="btn btn-sm btn-secondary" onclick="setImageFilter('labeled')" style="flex: 1; padding: 3px 6px; font-size: 0.7rem;">Sudah</button>
+    </div>
+
+    <!-- Thumbnails scroll container -->
+    <div id="thumbnails-list" style="flex: 1; overflow-y: auto; padding: 8px 10px;">
+      <!-- Injected via JS -->
+    </div>
+  </div>
+
+  <!-- COLUMN 2: Center Interactive Canvas -->
+  <div style="display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 0.5rem;">
+    <!-- Canvas Toolbar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.75); border: 1px solid var(--border-subtle); padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.76rem;">
+      <!-- Drawing Tools -->
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <button type="button" id="tool-draw" class="btn btn-sm btn-primary" onclick="setCanvasMode('draw')" title="Mode Gambar Bounding Box Baru (Drag &amp; Drop)" style="gap: 5px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+          </svg>
+          Draw BBox
+        </button>
+        <button type="button" id="tool-select" class="btn btn-sm btn-secondary" onclick="setCanvasMode('select')" title="Mode Pilih &amp; Geser Bounding Box" style="gap: 5px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+          </svg>
+          Select / Move
+        </button>
+
+        <span style="width: 1px; height: 18px; background: var(--border-subtle); margin: 0 4px;"></span>
+
+        <!-- Copy-Paste Ukuran BBox -->
+        <button type="button" class="btn btn-sm btn-secondary" onclick="copyActiveBBoxSize()" title="Salin Ukuran BBox Terpilih (Ctrl + C)" style="gap: 5px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+          </svg>
+          Copy Ukuran
+        </button>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="pasteBBoxSize()" title="Paste BBox dengan Ukuran yang Pernah Disalin (Ctrl + V)" style="gap: 5px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>
+          </svg>
+          Paste BBox
+        </button>
+      </div>
+
+      <!-- Zoom & Canvas Views -->
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <button type="button" class="btn btn-sm btn-secondary" onclick="zoomCanvas(0.15)" title="Perbesar (Zoom In)" style="padding: 2px 8px;">+</button>
+        <span id="zoom-label" style="font-size: 0.74rem; color: var(--text-muted); min-width: 42px; text-align: center;">100%</span>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="zoomCanvas(-0.15)" title="Perkecil (Zoom Out)" style="padding: 2px 8px;">&minus;</button>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="resetCanvasZoom()" title="Reset Tampilan (Fit)">Fit</button>
+      </div>
+    </div>
+
+    <!-- Interactive Canvas Stage -->
+    <div id="canvas-stage" ondragover="onCanvasDragOver(event)" ondrop="onCanvasDrop(event)">
+      <!-- Floating Crop Placement Bar (Visible during placement mode) -->
+      <div id="crop-placement-bar">
+        <span style="color: #38bdf8; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+          Geser posisi crop di kanvas
+        </span>
+        <span style="width: 1px; height: 16px; background: rgba(255,255,255,0.2);"></span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <label style="color: var(--text-muted); font-size: 0.7rem;">Skala:</label>
+          <input type="range" id="placement-scale-range" min="0.2" max="2.5" step="0.05" value="1.0" style="width: 70px; accent-color: #38bdf8;" oninput="updatePlacementScale(this.value)">
+          <span id="placement-scale-text" style="font-family: monospace; font-size: 0.72rem; color: #fff; min-width: 32px;">1.0x</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <label style="color: var(--text-muted); font-size: 0.7rem;">Kelas:</label>
+          <select id="placement-class-select" class="form-select" style="padding: 2px 6px; font-size: 0.7rem; width: 110px;"></select>
+        </div>
+        <button type="button" class="btn btn-success btn-sm" onclick="confirmCropPlacement()" style="padding: 2px 10px; font-size: 0.72rem;">
+          ✓ Tempel di Sini
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="cancelCropPlacement()" style="padding: 2px 8px; font-size: 0.72rem;">
+          ✕ Batal
+        </button>
+      </div>
+
+      <canvas id="annotation-canvas"></canvas>
+    </div>
+
+    <!-- Active BBox Quick Action Bar -->
+    <div id="bbox-action-bar" style="display: none; justify-content: space-between; align-items: center; background: rgba(56, 189, 248, 0.08); border: 1px solid var(--accent-border); padding: 6px 12px; border-radius: var(--radius-sm); font-size: 0.75rem;">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <strong id="active-bbox-label" style="color: #fff;">BBox Terpilih</strong>
+        <span id="active-bbox-coords" style="font-family: monospace; color: var(--cloud-300);">W: 0, H: 0</span>
+
+        <!-- Ubah Kelas BBox On The Fly -->
+        <div style="display: flex; align-items: center; gap: 6px; margin-left: 6px;">
+          <label style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0;">Ubah Kelas:</label>
+          <select id="active-bbox-class-select" class="form-select" style="padding: 2px 8px; font-size: 0.72rem; min-width: 120px; height: 26px;" onchange="changeActiveBBoxClass(this.value)"></select>
+        </div>
+
+        <!-- Indikator Layer Crop -->
+        <span id="active-bbox-crop-badge" class="badge" style="display: none; background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); font-size: 0.68rem; padding: 2px 7px;">
+          Layer Crop (Dapat Digeser)
+        </span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <!-- Fitur Crop Objek Bertepi Blur/Feathering -->
+        <button type="button" class="btn btn-sm btn-primary" onclick="cropSelectedObject()" style="padding: 3px 10px; font-size: 0.72rem; gap: 5px;" title="Ambil crop objek ini dengan Gaussian soft blur edge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+            <line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>
+          </svg>
+          Crop Objek
+        </button>
+
+        <!-- Tombol Hapus Layer Crop (Mengembalikan Latar ke Murni) -->
+        <button type="button" id="btn-delete-crop-layer" class="btn btn-sm btn-danger" style="display: none; padding: 3px 10px; font-size: 0.72rem; background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); color: #fca5a5;" onclick="deleteActiveCropLayer()" title="Hapus objek crop ini dan kembalikan latar belakang ke aslinya">
+          Hapus Objek Crop
+        </button>
+
+        <!-- Tombol Hapus BBox Biasa -->
+        <button type="button" class="btn btn-danger btn-sm" onclick="deleteActiveBBox()" style="padding: 3px 10px; font-size: 0.72rem;" title="Hapus BBox ini (Delete / Backspace)">
+          Hapus BBox
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLUMN 3: Class Manager, Active BBoxes List, & Crops Library -->
+  <div class="card" style="margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden;">
+    <!-- Right sidebar tabs -->
+    <div style="display: flex; border-bottom: 1px solid var(--border-subtle); background: rgba(255,255,255,0.015);">
+      <button type="button" id="tab-classes-btn" class="btn btn-sm btn-primary" onclick="switchRightTab('classes')" style="flex: 1; border-radius: 0; border: none; font-size: 0.76rem; padding: 9px 8px;">
+        Kelas Objek
+      </button>
+      <button type="button" id="tab-crops-btn" class="btn btn-sm btn-secondary" onclick="switchRightTab('crops')" style="flex: 1; border-radius: 0; border: none; font-size: 0.76rem; padding: 9px 8px;">
+        Aset Crop (<span id="tab-crops-badge">0</span>)
+      </button>
+    </div>
+
+    <!-- TAB 1: Classes & Active BBoxes -->
+    <div id="panel-classes" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem;">
+      <!-- Class Creation Form -->
+      <div>
+        <div style="font-size: 0.78rem; font-weight: 600; color: #fff; margin-bottom: 6px;">Tambah Kelas Manual</div>
+        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+          <input type="text" id="new-class-name" class="form-control" placeholder="Nama kelas baru..." style="padding: 6px 10px; font-size: 0.76rem;" onkeydown="if(event.key==='Enter') addNewClass();">
+          <input type="color" id="new-class-color" value="#38bdf8" style="width: 32px; height: 32px; padding: 0; border: none; border-radius: 4px; cursor: pointer; background: transparent;" title="Pilih Warna Kelas">
+          <button type="button" class="btn btn-sm btn-primary" onclick="addNewClass()" style="padding: 6px 12px; font-weight: 700;">+</button>
+        </div>
+
+        <!-- Class List Cards -->
+        <div id="classes-chips-container" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+      <!-- Bounding Boxes on current image -->
+      <div style="flex: 1; border-top: 1px solid var(--border-subtle); padding-top: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 0.78rem; font-weight: 600; color: #fff;">BBox di Gambar Ini</span>
+          <span id="current-bbox-count-badge" class="badge badge-neutral" style="font-size: 0.7rem;">0 box</span>
+        </div>
+        <div id="current-bboxes-list" style="display: flex; flex-direction: column; gap: 5px;">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Crops Library (Drag and Drop Assets) -->
+    <div id="panel-crops" style="display: none; flex: 1; overflow-y: auto; padding: 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 0.78rem; font-weight: 600; color: #fff;">Aset Objek Bertepi Halus</span>
+        <span id="crops-count-badge" class="badge badge-neutral" style="font-size: 0.7rem;">0 aset</span>
+      </div>
+      <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.85rem; line-height: 1.4;">
+        Tarik (drag) atau klik tombol pada kartu untuk menaruh objek crop secara visual dan fleksibel ke atas kanvas.
+      </p>
+
+      <div id="crops-library-list">
+        <!-- Injected via JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================================================================
+     MODAL: Automatic Labeling (Model Detection)
+     ============================================================================== -->
+<div id="modal-autolabel" class="modal-overlay" style="display: none;">
+  <div class="card" style="max-width: 580px; width: 92%; margin: auto; background: #0c121e; border: 1px solid rgba(168, 85, 247, 0.4); box-shadow: 0 24px 60px rgba(0,0,0,0.85);" onclick="event.stopPropagation()">
+    <div class="card-header" style="border-bottom: 1px solid rgba(168, 85, 247, 0.25);">
+      <div class="card-title" style="color: #c084fc; display: flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+        Automatic Labeling (Model YOLO)
+      </div>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="closeAutoLabelModal()">&times;</button>
+    </div>
+
+    <div class="card-body" style="padding: 1.5rem;">
+      <p style="font-size: 0.76rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+        Gunakan model YOLO yang telah dilatih atau unggah bobot model kustom (<code style="color: #fff;">.pt</code>) untuk mendeteksi dan memberi bounding box secara otomatis.
+      </p>
+
+      <!-- Source Tabs -->
+      <div style="display: flex; gap: 8px; margin-bottom: 1.25rem;">
+        <button type="button" id="tab-model-studio" class="btn btn-sm btn-primary" onclick="switchModelSource('studio')" style="flex: 1; padding: 7px 12px; font-size: 0.75rem;">
+          Model Studio (Runs)
+        </button>
+        <button type="button" id="tab-model-upload" class="btn btn-sm btn-secondary" onclick="switchModelSource('upload')" style="flex: 1; padding: 7px 12px; font-size: 0.75rem;">
+          Upload Model (.pt)
+        </button>
+      </div>
+
+      <!-- Option A: Studio Models Dropdown -->
+      <div id="box-source-studio" class="form-group">
+        <label class="form-label" for="select-studio-model">Pilih Model Hasil Training</label>
+        <select id="select-studio-model" class="form-select"></select>
+        <span style="font-size: 0.7rem; color: var(--text-muted); margin-top: 3px; display: block;">
+          Model bertanda <strong style="color: #fbbf24;">★ [HASIL TERBAIK]</strong> adalah model pilihan terbaik Anda.
+        </span>
+      </div>
+
+      <!-- Option B: Custom Model Upload Dropzone -->
+      <div id="box-source-upload" class="form-group" style="display: none;">
+        <label class="form-label">Unggah File Model YOLO (.pt)</label>
+        <div style="border: 2px dashed rgba(168, 85, 247, 0.4); border-radius: var(--radius-sm); padding: 1.25rem; text-align: center; background: rgba(168, 85, 247, 0.03);">
+          <input type="file" id="input-model-file" accept=".pt" style="display: none;" onchange="handleModelFileChange(this)">
+          <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('input-model-file').click()">
+            Pilih Berkas .pt...
+          </button>
+          <div id="model-filename-label" style="font-size: 0.74rem; color: #c084fc; margin-top: 6px; font-weight: 600;">Belum ada file dipilih</div>
+        </div>
+      </div>
+
+      <!-- Settings for Standard Studio & Upload Inferencing -->
+      <div id="box-standard-infer-settings">
+        <!-- Confidence Slider -->
+        <div class="form-group" style="margin-top: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label class="form-label" style="margin-bottom: 0;">Ambang Batas Confidence</label>
+            <span id="label-conf-val" style="font-family: monospace; font-size: 0.76rem; color: #38bdf8; font-weight: 700;">35%</span>
+          </div>
+          <input type="range" id="slider-conf" min="10" max="90" value="35" class="form-control" style="padding: 0;" oninput="document.getElementById('label-conf-val').innerText = this.value + '%'">
+        </div>
+
+        <!-- Scope Radio -->
+        <div class="form-group">
+          <label class="form-label">Cakupan Pelabelan</label>
+          <div style="display: flex; gap: 14px;">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: #fff; cursor: pointer;">
+              <input type="radio" name="auto_target_mode" value="current" checked style="accent-color: #38bdf8;">
+              Hanya Gambar Aktif Saat Ini
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: #fff; cursor: pointer;">
+              <input type="radio" name="auto_target_mode" value="all" style="accent-color: #38bdf8;">
+              Semua Gambar di Sesi Ini (Batch)
+            </label>
+          </div>
+        </div>
+
+        <!-- Overwrite Checkbox -->
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer;">
+            <input type="checkbox" id="check-auto-overwrite" style="accent-color: #38bdf8;">
+            Timpa anotasi BBox yang sudah ada (overwrite)
+          </label>
+        </div>
+      </div>
+
+      <!-- Progress status -->
+      <div id="autolabel-status-indicator" style="display: none; padding: 10px; border-radius: var(--radius-sm); background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); font-size: 0.76rem; color: #e9d5ff; margin-bottom: 1rem; align-items: center; gap: 8px;">
+        <div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>
+        <span id="autolabel-status-text">Menjalankan inferensi model YOLO...</span>
+      </div>
+
+      <!-- Buttons -->
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeAutoLabelModal()">Batal</button>
+        <button type="button" id="btn-run-autolabel" class="btn btn-primary btn-sm" onclick="onAutoLabelSubmitClick()" style="background: linear-gradient(180deg, #a855f7 0%, #7e22ce 100%); border-color: #a855f7;">
+          Mulai Auto-Labeling
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================================================================
+     MODAL: Split Dataset & Export data.yaml
+     ============================================================================== -->
+<div id="modal-split" class="modal-overlay" style="display: none;">
+  <div class="card" style="max-width: 540px; width: 92%; margin: auto; background: #0c121e; border: 1px solid var(--accent-border); box-shadow: 0 24px 60px rgba(0,0,0,0.85);" onclick="event.stopPropagation()">
+    <div class="card-header">
+      <div class="card-title">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+          <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+          <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+          <line x1="4" y1="4" x2="9" y2="9"/>
+        </svg>
+        Split Dataset &amp; Generate data.yaml
+      </div>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="closeSplitModal()">&times;</button>
+    </div>
+
+    <div class="card-body" style="padding: 1.5rem;">
+      <div class="form-group">
+        <label class="form-label" for="export-dataset-name">Nama Dataset Hasil Ekspor</label>
+        <input type="text" id="export-dataset-name" class="form-control" value="{{ session.name }} (Dataset)">
+      </div>
+
+      <!-- Info Komposisi Gambar (Berlabel + Background) -->
+      <div style="background: rgba(56, 189, 248, 0.07); border: 1px solid var(--accent-border); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; margin-bottom: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+          <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 500;">Total Gambar yang Di-split:</span>
+          <strong style="color: #fff; font-size: 0.82rem;" id="split-total-count">0 file</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.71rem; color: var(--text-muted);">
+          <span>Objek Berlabel: <strong id="split-labeled-count" style="color: #4ade80;">0</strong></span>
+          <span>Background (Tanpa BBox): <strong id="split-bg-count" style="color: #38bdf8;">0</strong></span>
+        </div>
+        <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 4px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 3px;">
+          Gambar background tanpa BBox otomatis diikutsertakan sebagai sampel negatif standar YOLO.
+        </div>
+      </div>
+
+      <!-- Preset Rasio Cepat -->
+      <div style="margin-bottom: 0.85rem;">
+        <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 5px;">Preset Rasio Populer:</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-sm btn-secondary" style="font-size: 0.72rem; padding: 3px 8px;" onclick="setSplitPreset(80, 20, 0)">
+            80 / 20 (Tanpa Test)
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" style="font-size: 0.72rem; padding: 3px 8px;" onclick="setSplitPreset(70, 20, 10)">
+            70 / 20 / 10 (Standar)
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" style="font-size: 0.72rem; padding: 3px 8px;" onclick="setSplitPreset(85, 15, 0)">
+            85 / 15 (Tanpa Test)
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" style="font-size: 0.72rem; padding: 3px 8px;" onclick="setSplitPreset(80, 10, 10)">
+            80 / 10 / 10
+          </button>
+        </div>
+      </div>
+
+      <!-- Ratio Slider -->
+      <div class="form-group">
+        <label class="form-label">Rasio Pembagian Dataset (Total: 100%)</label>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 0.85rem;">
+          <div>
+            <span style="font-size: 0.74rem; color: #4ade80;">Train: <strong id="val-train-pct">70%</strong></span>
+            <input type="range" id="slider-train" min="10" max="95" value="70" class="form-control" style="padding: 0; margin-top: 4px;" oninput="updateSplitSliders('train')">
+          </div>
+          <div>
+            <span style="font-size: 0.74rem; color: #38bdf8;">Val: <strong id="val-val-pct">20%</strong></span>
+            <input type="range" id="slider-val" min="5" max="50" value="20" class="form-control" style="padding: 0; margin-top: 4px;" oninput="updateSplitSliders('val')">
+          </div>
+          <div>
+            <span style="font-size: 0.74rem; color: #f59e0b;">Test: <strong id="val-test-pct">10%</strong></span>
+            <input type="range" id="slider-test" min="0" max="40" value="10" class="form-control" style="padding: 0; margin-top: 4px;" oninput="updateSplitSliders('test')">
+          </div>
+        </div>
+      </div>
+
+      <!-- Split Post-Action Choice -->
+      <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.85rem; margin-bottom: 1.25rem;">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #fff; margin-bottom: 4px;">Pilihan Alur Pasca-Split:</div>
+        <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0; line-height: 1.45;">
+          Pilih <strong>Simpan Dataset Saja</strong> untuk menyimpan dataset normal, atau pilih <strong>Langsung Augmentasi</strong> untuk langsung melipatgandakan variasi gambar tanpa menduplikasi dataset normal di menu <em>Datasets</em>.
+        </p>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeSplitModal()">Batal</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btn-do-split" class="btn btn-secondary btn-sm" onclick="submitSplitDataset('save')" style="display: flex; align-items: center; gap: 6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Simpan Dataset Saja
+          </button>
+          <button type="button" id="btn-do-split-aug" class="btn btn-primary btn-sm" onclick="submitSplitDataset('augment')" style="display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 10px rgba(2, 132, 199, 0.4);">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Langsung Augmentasi
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==============================================================================
+     JAVASCRIPT: Studio Canvas, Interactive Crop Placement & Auto-Label
+     ============================================================================== -->
+<script>
+  const SESSION_ID = "{{ session.id }}";
+
+  // ==========================================
+  // 1. CUSTOM STYLED NOTIFICATIONS & CONFIRMS
+  // (Menggantikan seluruh alert & confirm bawaan browser)
+  // ==========================================
+  function showToast(message, type = 'info', title = '') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `custom-toast toast-${type}`;
+
+    let icon = 'i';
+    let defaultTitle = 'Informasi';
+    if (type === 'success') { icon = '✓'; defaultTitle = 'Berhasil'; }
+    else if (type === 'error') { icon = '✕'; defaultTitle = 'Gagal'; }
+    else if (type === 'warning') { icon = '!'; defaultTitle = 'Perhatian'; }
+
+    toast.innerHTML = `
+      <div class="toast-icon" style="color: ${type === 'success' ? '#4ade80' : type === 'error' ? '#f87171' : type === 'warning' ? '#fbbf24' : '#38bdf8'}; font-weight: bold;">${icon}</div>
+      <div class="toast-content">
+        <div class="toast-title">${title || defaultTitle}</div>
+        <div class="toast-message">${message}</div>
+      </div>
+      <button type="button" class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(40px)';
+      setTimeout(() => toast.remove(), 250);
+    }, 4500);
+  }
+
+  // Override browser native alert agar otomatis pakai custom glassmorphism toast
+  window.alert = function(msg) {
+    showToast(msg, 'info');
+  };
+
+  let confirmPromiseResolve = null;
+  function showConfirmDialog({ title = 'Konfirmasi Tindakan', message = '', confirmText = 'Lanjutkan', cancelText = 'Batal', danger = false }) {
+    return new Promise((resolve) => {
+      confirmPromiseResolve = resolve;
+      document.getElementById('confirm-modal-title').innerText = title;
+      document.getElementById('confirm-modal-message').innerText = message;
+      
+      const okBtn = document.getElementById('confirm-modal-btn-ok');
+      const cancelBtn = document.getElementById('confirm-modal-btn-cancel');
+      
+      okBtn.innerText = confirmText;
+      cancelBtn.innerText = cancelText;
+
+      if (danger) {
+        okBtn.className = 'btn btn-danger btn-sm';
+        okBtn.style.background = 'linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)';
+        okBtn.style.borderColor = '#ef4444';
+      } else {
+        okBtn.className = 'btn btn-primary btn-sm';
+        okBtn.style.background = '';
+        okBtn.style.borderColor = '';
+      }
+
+      document.getElementById('modal-confirm').style.display = 'flex';
+    });
+  }
+
+  function resolveConfirm(val) {
+    document.getElementById('modal-confirm').style.display = 'none';
+    if (confirmPromiseResolve) {
+      confirmPromiseResolve(val);
+      confirmPromiseResolve = null;
+    }
+  }
+
+  // ==========================================
+  // 2. STATE MANAGEMENT
+  // ==========================================
+  let allImages = [];
+  let currentFilter = 'all';
+  let currentIndex = 0;
+  let currentImage = null;
+  let currentImageElement = new Image();
+
+  // Bounding boxes data for current image: array of {id, class_id, xc, yc, w, h, is_crop_layer, scale, crop_filename}
+  let currentBBoxes = [];
+  let activeBBoxIndex = -1;
+  let copiedBBoxSize = null; // Memory for Copy-Paste BBox Size ({w, h})
+
+  // Classes list: array of {id, name, color}
+  let classesList = [];
+  let activeClassId = 0;
+
+  // Crops library
+  let cropsList = [];
+
+  // Drag & Drop Placement State
+  let isPlacingCrop = false;
+  let placementCropData = null; // { filename, url, imgElement }
+  let placementScale = 1.0;
+  let placementPos = { x: 0.5, y: 0.5 }; // normalized 0..1
+
+  // Canvas State
+  const canvas = document.getElementById('annotation-canvas');
+  const ctx = canvas.getContext('2d');
+  let canvasMode = 'draw'; // 'draw' or 'select'
+  let isDrawing = false;
+  let isDraggingBBox = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragInitialXc = 0;
+  let dragInitialYc = 0;
+  let zoomLevel = 1.0;
+
+  // BBox Resizing State
+  let isResizingBBox = false;
+  let activeResizeHandle = null;
+  let resizeStartX = 0;
+  let resizeStartY = 0;
+  let resizeInitialBox = null;
+
+  // Temporary drawing rect
+  let drawStartX = 0;
+  let drawStartY = 0;
+  let drawCurrentX = 0;
+  let drawCurrentY = 0;
+
+  // ==========================================
+  // 3. INISIALISASI SAAT HALAMAN DIMUAT
+  // ==========================================
+  document.addEventListener('DOMContentLoaded', async function() {
+    await loadClasses();
+    await loadImages();
+    await loadCrops();
+    setupCanvasEvents();
+    setupKeyboardShortcuts();
+  });
+
+  // ==========================================
+  // 4. MANAJEMEN KELAS MANUAL (ADD & DELETE)
+  // ==========================================
+  async function loadClasses() {
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/classes`);
+      const data = await res.json();
+      if (data.success && data.classes) {
+        classesList = data.classes;
+        if (classesList.length > 0 && !classesList.some(c => c.id === activeClassId)) {
+          activeClassId = classesList[0].id;
+        }
+        renderClassesUI();
+      }
+    } catch (e) {
+      console.error("Error loading classes:", e);
+    }
+  }
+
+  function renderClassesUI() {
+    const container = document.getElementById('classes-chips-container');
+    container.innerHTML = '';
+
+    if (classesList.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 1rem 0.5rem; text-align: center; color: var(--text-muted); font-size: 0.74rem; line-height: 1.5; border: 1px dashed var(--border-subtle); border-radius: var(--radius-sm); background: rgba(255,255,255,0.01);">
+          Belum ada kelas deteksi.<br>Ketik nama kelas di atas lalu klik <strong>+</strong> untuk mulai memberi label.
+        </div>
+      `;
+      return;
+    }
+
+    classesList.forEach((c) => {
+      const countForClass = currentBBoxes.filter(b => b.class_id === c.id).length;
+      const card = document.createElement('div');
+      card.className = `class-item-card ${c.id === activeClassId ? 'active' : ''}`;
+      card.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
+          <span style="width: 10px; height: 10px; border-radius: 50%; background: ${c.color || '#38bdf8'}; flex-shrink: 0;"></span>
+          <span style="font-weight: 600; font-size: 0.76rem; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.name}</span>
+          <span style="font-size: 0.68rem; color: var(--text-muted);">(${countForClass})</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button type="button" class="btn btn-sm btn-danger" style="padding: 3px 6px; font-size: 0.65rem; display: flex; align-items: center; justify-content: center;" title="Hapus Kelas ${c.name}" onclick="event.stopPropagation(); deleteClass(${c.id}, '${c.name}');">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
+      `;
+      card.onclick = () => {
+        activeClassId = c.id;
+        renderClassesUI();
+        if (activeBBoxIndex !== -1 && currentBBoxes[activeBBoxIndex]) {
+          changeActiveBBoxClass(activeClassId);
+        }
+      };
+      container.appendChild(card);
+    });
+
+    // Perbarui dropdown kelas di bar placement
+    const pSelect = document.getElementById('placement-class-select');
+    if (pSelect) {
+      pSelect.innerHTML = '';
+      classesList.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.text = c.name;
+        if (c.id === activeClassId) opt.selected = true;
+        pSelect.appendChild(opt);
+      });
+    }
+
+    // Perbarui dropdown kelas di active bbox action bar
+    updateActiveBBoxBar();
+  }
+
+  async function addNewClass() {
+    const nameInput = document.getElementById('new-class-name');
+    const colorInput = document.getElementById('new-class-color');
+    const name = nameInput.value.trim();
+    if (!name) return;
+
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/classes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, color: colorInput.value || '#38bdf8' })
+      });
+      const data = await res.json();
+      if (data.success && data.classes) {
+        classesList = data.classes;
+        if (data.class) activeClassId = data.class.id;
+        nameInput.value = '';
+        showToast(`Kelas '${name}' berhasil ditambahkan!`, 'success');
+        renderClassesUI();
+        redrawCanvas();
+      }
+    } catch (e) {
+      showToast("Gagal menambah kelas: " + e.message, "error");
+    }
+  }
+
+  async function deleteClass(classId, className) {
+    const confirmed = await showConfirmDialog({
+      title: `Hapus Kelas '${className}'?`,
+      message: `Seluruh bounding box pada sesi ini yang menggunakan kelas '${className}' akan dibersihkan. Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: 'Ya, Hapus Kelas',
+      cancelText: 'Batal',
+      danger: true
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/classes/${classId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success && data.classes) {
+        classesList = data.classes;
+        activeClassId = (classesList.length > 0) ? classesList[0].id : 0;
+        showToast(`Kelas '${className}' berhasil dihapus.`, 'info');
+        await loadAnnotationsForCurrent();
+        renderClassesUI();
+        redrawCanvas();
+      } else {
+        showToast("Gagal menghapus kelas: " + (data.error || "Unknown"), "error");
+      }
+    } catch (e) {
+      showToast("Error: " + e.message, "error");
+    }
+  }
+
+  // ==========================================
+  // 5. IMAGE LIST, NAVIGASI & HAPUS GAMBAR SESI
+  // ==========================================
+  async function loadImages() {
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/images`);
+      const data = await res.json();
+      if (data.success && data.images) {
+        allImages = data.images;
+        updateHeaderProgress();
+        renderThumbnails();
+        if (allImages.length > 0 && !currentImage) {
+          selectImage(0);
+        }
+      }
+    } catch (e) {
+      console.error("Error loading images:", e);
+    }
+  }
+
+  function updateHeaderProgress() {
+    const labeled = allImages.filter(i => i.is_labeled).length;
+    const total = allImages.length;
+    const badge = document.getElementById('header-progress-badge');
+    if (badge) {
+      badge.innerText = `${labeled} / ${total} Berlabel`;
+      badge.className = (labeled === total && total > 0) ? 'badge badge-success' : 'badge badge-running';
+    }
+  }
+
+  function setImageFilter(flt) {
+    currentFilter = flt;
+    document.getElementById('flt-all').className = flt === 'all' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    document.getElementById('flt-unlabeled').className = flt === 'unlabeled' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    document.getElementById('flt-labeled').className = flt === 'labeled' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    renderThumbnails();
+  }
+
+  function getFilteredImages() {
+    if (currentFilter === 'labeled') return allImages.filter(i => i.is_labeled);
+    if (currentFilter === 'unlabeled') return allImages.filter(i => !i.is_labeled);
+    return allImages;
+  }
+
+  function renderThumbnails() {
+    const container = document.getElementById('thumbnails-list');
+    container.innerHTML = '';
+    const filtered = getFilteredImages();
+    document.getElementById('img-filter-count').innerText = `${filtered.length} gambar`;
+
+    filtered.forEach((img) => {
+      const realIndex = allImages.findIndex(i => i.filename === img.filename);
+      const isCurrent = (currentImage && currentImage.filename === img.filename);
+      const item = document.createElement('div');
+      item.className = `thumb-item ${isCurrent ? 'active' : ''}`;
+      item.innerHTML = `
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${img.is_labeled ? '#4ade80' : 'rgba(255,255,255,0.2)'}; flex-shrink: 0;"></span>
+        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.74rem; color: #fff;">${img.filename}</span>
+        <span style="font-size: 0.68rem; color: var(--text-muted); background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 10px;">${img.bbox_count || 0}</span>
+      `;
+      item.onclick = () => selectImage(realIndex);
+      container.appendChild(item);
+    });
+  }
+
+  async function selectImage(index) {
+    if (index < 0 || index >= allImages.length) return;
+    
+    // Auto-save anotasi saat ini sebelum pindah
+    if (currentImage) {
+      await saveCurrentAnnotations();
+    }
+
+    if (isPlacingCrop) cancelCropPlacement();
+
+    currentIndex = index;
+    currentImage = allImages[index];
+    document.getElementById('image-counter-text').innerText = `${currentIndex + 1} / ${allImages.length}`;
+
+    renderThumbnails();
+    activeBBoxIndex = -1;
+    updateActiveBBoxBar();
+
+    // Load Image Element
+    currentImageElement.src = `/labeling/${SESSION_ID}/image/${currentImage.filename}?t=${Date.now()}`;
+    currentImageElement.onload = async function() {
+      await loadAnnotationsForCurrent();
+      fitCanvasToContainer();
+      redrawCanvas();
+    };
+  }
+
+  async function navImage(step) {
+    const nextIdx = currentIndex + step;
+    if (nextIdx >= 0 && nextIdx < allImages.length) {
+      await selectImage(nextIdx);
+    }
+  }
+
+  // Hapus Gambar Sesi
+  async function deleteCurrentImage() {
+    if (!currentImage) {
+      showToast("Tidak ada gambar aktif yang dapat dihapus.", "warning");
+      return;
+    }
+
+    const filename = currentImage.filename;
+    const confirmed = await showConfirmDialog({
+      title: 'Hapus Gambar dari Sesi',
+      message: `Hapus gambar "${filename}" beserta seluruh bounding box dan labelnya dari sesi pelabelan ini?\n\nBerkas gambar dan label akan dihapus permanen.`,
+      confirmText: 'Ya, Hapus Gambar',
+      cancelText: 'Batal',
+      danger: true
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/image/${filename}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Gambar '${filename}' berhasil dihapus dari sesi.`, 'success');
+        const deletedIdx = currentIndex;
+        allImages.splice(deletedIdx, 1);
+        updateHeaderProgress();
+        renderThumbnails();
+
+        if (allImages.length === 0) {
+          currentImage = null;
+          currentBBoxes = [];
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          document.getElementById('image-counter-text').innerText = '0 / 0';
+          updateActiveBBoxBar();
+          renderBBoxesListUI();
+        } else {
+          const nextIdx = Math.min(deletedIdx, allImages.length - 1);
+          selectImage(nextIdx);
+        }
+      } else {
+        showToast("Gagal menghapus gambar: " + (data.error || "Unknown"), "error");
+      }
+    } catch (e) {
+      showToast("Error menghapus gambar: " + e.message, "error");
+    }
+  }
+
+  async function loadAnnotationsForCurrent() {
+    if (!currentImage) return;
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/annotations/${currentImage.filename}`);
+      const data = await res.json();
+      currentBBoxes = (data.success && data.bboxes) ? data.bboxes : [];
+      renderBBoxesListUI();
+    } catch (e) {
+      currentBBoxes = [];
+    }
+  }
+
+  async function saveCurrentAnnotations() {
+    if (!currentImage) return;
+    try {
+      await fetch(`/labeling/${SESSION_ID}/annotations/${currentImage.filename}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bboxes: currentBBoxes })
+      });
+      currentImage.is_labeled = (currentBBoxes.length > 0);
+      currentImage.bbox_count = currentBBoxes.length;
+      updateHeaderProgress();
+    } catch (e) {
+      console.error("Save error:", e);
+    }
+  }
+
+  // ==========================================
+  // 6. CANVAS INTERACTIONS, ZOOM & MOVE
+  // ==========================================
+  function fitCanvasToContainer() {
+    const stage = document.getElementById('canvas-stage');
+    if (!currentImageElement.width || !currentImageElement.height) return;
+
+    const stageW = stage.clientWidth - 24;
+    const stageH = stage.clientHeight - 24;
+
+    const scale = Math.min(stageW / currentImageElement.width, stageH / currentImageElement.height, 1.0) * zoomLevel;
+    canvas.width = currentImageElement.width * scale;
+    canvas.height = currentImageElement.height * scale;
+  }
+
+  function zoomCanvas(delta) {
+    zoomLevel = Math.max(0.3, Math.min(3.0, zoomLevel + delta));
+    document.getElementById('zoom-label').innerText = `${Math.round(zoomLevel * 100)}%`;
+    fitCanvasToContainer();
+    redrawCanvas();
+  }
+
+  function resetCanvasZoom() {
+    zoomLevel = 1.0;
+    document.getElementById('zoom-label').innerText = '100%';
+    fitCanvasToContainer();
+    redrawCanvas();
+  }
+
+  function setCanvasMode(mode) {
+    canvasMode = mode;
+    document.getElementById('tool-draw').className = (mode === 'draw') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    document.getElementById('tool-select').className = (mode === 'select') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    canvas.className = (mode === 'draw') ? '' : 'mode-select';
+  }
+
+  function redrawCanvas() {
+    if (!currentImageElement.src) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(currentImageElement, 0, 0, canvas.width, canvas.height);
+
+    // 1. Draw existing BBoxes
+    currentBBoxes.forEach((b, idx) => {
+      const cls = classesList.find(c => c.id === b.class_id) || { name: `cls_${b.class_id}`, color: '#38bdf8' };
+      const x = (b.xc - b.w / 2) * canvas.width;
+      const y = (b.yc - b.h / 2) * canvas.height;
+      const w = b.w * canvas.width;
+      const h = b.h * canvas.height;
+
+      const isSelected = (idx === activeBBoxIndex);
+
+      ctx.fillStyle = isSelected ? 'rgba(56, 189, 248, 0.22)' : 'rgba(0, 0, 0, 0.05)';
+      ctx.fillRect(x, y, w, h);
+
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.strokeStyle = isSelected ? '#ffffff' : (cls.color || '#38bdf8');
+      
+      if (b.is_crop_layer) {
+        ctx.setLineDash([5, 3]);
+      } else {
+        ctx.setLineDash([]);
+      }
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+
+      // Label Tag
+      ctx.fillStyle = cls.color || '#38bdf8';
+      const labelText = b.is_crop_layer ? `[Crop] ${cls.name}` : cls.name;
+      const textWidth = ctx.measureText(labelText).width;
+      ctx.fillRect(x, Math.max(0, y - 18), textWidth + 12, 18);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '10px -apple-system, Poppins, sans-serif';
+      ctx.fillText(labelText, x + 6, Math.max(12, y - 5));
+
+      if (isSelected) {
+        drawHandles(x, y, w, h);
+      }
+    });
+
+    // 2. In-progress drawing rectangle
+    if (isDrawing) {
+      const x = Math.min(drawStartX, drawCurrentX);
+      const y = Math.min(drawStartY, drawCurrentY);
+      const w = Math.abs(drawCurrentX - drawStartX);
+      const h = Math.abs(drawCurrentY - drawStartY);
+
+      const cls = classesList.find(c => c.id === activeClassId) || { color: '#38bdf8' };
+      ctx.strokeStyle = cls.color || '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
+
+    // 3. Ghost Crop Preview during Placement Mode
+    if (isPlacingCrop && placementCropData && placementCropData.imgElement && placementCropData.imgElement.complete) {
+      const cropImg = placementCropData.imgElement;
+      const scaledW = cropImg.width * (canvas.width / (currentImageElement.width || 1)) * placementScale;
+      const scaledH = cropImg.height * (canvas.height / (currentImageElement.height || 1)) * placementScale;
+
+      const px = placementPos.x * canvas.width - scaledW / 2;
+      const py = placementPos.y * canvas.height - scaledH / 2;
+
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(cropImg, px, py, scaledW, scaledH);
+      ctx.restore();
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([5, 3]);
+      ctx.strokeRect(px, py, scaledW, scaledH);
+      ctx.setLineDash([]);
+    }
+  }
+
+  const HANDLE_SIZE = 8;
+  const HANDLE_HIT_RADIUS = 7;
+
+  function getBBoxHandles(x, y, w, h) {
+    return {
+      nw: { x: x, y: y, cursor: 'nwse-resize' },
+      n:  { x: x + w / 2, y: y, cursor: 'ns-resize' },
+      ne: { x: x + w, y: y, cursor: 'nesw-resize' },
+      e:  { x: x + w, y: y + h / 2, cursor: 'ew-resize' },
+      se: { x: x + w, y: y + h, cursor: 'nwse-resize' },
+      s:  { x: x + w / 2, y: y + h, cursor: 'ns-resize' },
+      sw: { x: x, y: y + h, cursor: 'nesw-resize' },
+      w:  { x: x, y: y + h / 2, cursor: 'ew-resize' }
+    };
+  }
+
+  function drawHandles(x, y, w, h) {
+    const handles = getBBoxHandles(x, y, w, h);
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#0284c7';
+    ctx.lineWidth = 1.5;
+
+    for (const key in handles) {
+      const pt = handles[key];
+      ctx.fillRect(pt.x - HANDLE_SIZE / 2, pt.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+      ctx.strokeRect(pt.x - HANDLE_SIZE / 2, pt.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+    }
+  }
+
+  function hitTestHandle(mx, my, bboxIndex) {
+    if (bboxIndex < 0 || bboxIndex >= currentBBoxes.length) return null;
+    const b = currentBBoxes[bboxIndex];
+    const x = (b.xc - b.w / 2) * canvas.width;
+    const y = (b.yc - b.h / 2) * canvas.height;
+    const w = b.w * canvas.width;
+    const h = b.h * canvas.height;
+    const handles = getBBoxHandles(x, y, w, h);
+
+    for (const key in handles) {
+      const pt = handles[key];
+      if (Math.abs(mx - pt.x) <= HANDLE_HIT_RADIUS && Math.abs(my - pt.y) <= HANDLE_HIT_RADIUS) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  function setupCanvasEvents() {
+    canvas.addEventListener('mousedown', function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      if (isPlacingCrop) {
+        placementPos = {
+          x: Math.max(0.05, Math.min(0.95, mx / canvas.width)),
+          y: Math.max(0.05, Math.min(0.95, my / canvas.height))
+        };
+        confirmCropPlacement();
+        return;
+      }
+
+      // 1. Cek apakah klik handle resize pada BBox yang sedang aktif
+      if (activeBBoxIndex !== -1) {
+        const handle = hitTestHandle(mx, my, activeBBoxIndex);
+        if (handle) {
+          isResizingBBox = true;
+          activeResizeHandle = handle;
+          resizeStartX = mx;
+          resizeStartY = my;
+          const b = currentBBoxes[activeBBoxIndex];
+          const bx = (b.xc - b.w / 2) * canvas.width;
+          const by = (b.yc - b.h / 2) * canvas.height;
+          const bw = b.w * canvas.width;
+          const bh = b.h * canvas.height;
+          resizeInitialBox = {
+            x1: bx,
+            y1: by,
+            x2: bx + bw,
+            y2: by + bh
+          };
+          return;
+        }
+      }
+
+      // 2. Cek apakah klik pada BBox yang sudah ada (untuk pilih & pindahkan)
+      const hitIdx = hitTestBBox(mx, my);
+      if (hitIdx !== -1) {
+        activeBBoxIndex = hitIdx;
+        isDraggingBBox = true;
+        dragStartX = mx;
+        dragStartY = my;
+        const b = currentBBoxes[hitIdx];
+        dragInitialXc = b.xc;
+        dragInitialYc = b.yc;
+        updateActiveBBoxBar();
+        redrawCanvas();
+        return;
+      }
+
+      // 3. Jika klik di ruang kosong kanvas
+      if (canvasMode === 'draw') {
+        if (classesList.length === 0) {
+          showToast("Silakan buat minimal 1 kelas deteksi terlebih dahulu di panel kanan.", "warning");
+          return;
+        }
+        activeBBoxIndex = -1;
+        updateActiveBBoxBar();
+        isDrawing = true;
+        drawStartX = mx;
+        drawStartY = my;
+        drawCurrentX = mx;
+        drawCurrentY = my;
+        redrawCanvas();
+      } else {
+        activeBBoxIndex = -1;
+        updateActiveBBoxBar();
+        redrawCanvas();
+      }
+    });
+
+    canvas.addEventListener('mousemove', function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      if (isPlacingCrop) {
+        placementPos = {
+          x: Math.max(0.05, Math.min(0.95, mx / canvas.width)),
+          y: Math.max(0.05, Math.min(0.95, my / canvas.height))
+        };
+        redrawCanvas();
+        return;
+      }
+
+      // Update kursor mouse interaktif
+      if (!isDrawing && !isDraggingBBox && !isResizingBBox) {
+        if (activeBBoxIndex !== -1) {
+          const handle = hitTestHandle(mx, my, activeBBoxIndex);
+          if (handle) {
+            const b = currentBBoxes[activeBBoxIndex];
+            const handles = getBBoxHandles(
+              (b.xc - b.w / 2) * canvas.width,
+              (b.yc - b.h / 2) * canvas.height,
+              b.w * canvas.width,
+              b.h * canvas.height
+            );
+            canvas.style.cursor = handles[handle].cursor;
+            return;
+          }
+        }
+        const hitIdx = hitTestBBox(mx, my);
+        if (hitIdx !== -1) {
+          canvas.style.cursor = (hitIdx === activeBBoxIndex) ? 'move' : 'pointer';
+        } else {
+          canvas.style.cursor = (canvasMode === 'draw') ? 'crosshair' : 'default';
+        }
+      }
+
+      // Proses Menggambar BBox Baru
+      if (isDrawing) {
+        drawCurrentX = mx;
+        drawCurrentY = my;
+        redrawCanvas();
+      }
+      // Proses Mengubah Ukuran (Resize) BBox
+      else if (isResizingBBox && activeBBoxIndex !== -1) {
+        const b = currentBBoxes[activeBBoxIndex];
+        let x1 = resizeInitialBox.x1;
+        let y1 = resizeInitialBox.y1;
+        let x2 = resizeInitialBox.x2;
+        let y2 = resizeInitialBox.y2;
+        const dx = mx - resizeStartX;
+        const dy = my - resizeStartY;
+
+        if (activeResizeHandle.includes('w')) x1 += dx;
+        if (activeResizeHandle.includes('e')) x2 += dx;
+        if (activeResizeHandle.includes('n')) y1 += dy;
+        if (activeResizeHandle.includes('s')) y2 += dy;
+
+        let nx1 = Math.min(x1, x2);
+        let nx2 = Math.max(x1, x2);
+        let ny1 = Math.min(y1, y2);
+        let ny2 = Math.max(y1, y2);
+
+        // Batasi ukuran minimal 8px
+        if (nx2 - nx1 < 8) nx2 = nx1 + 8;
+        if (ny2 - ny1 < 8) ny2 = ny1 + 8;
+
+        // Clamp ke batas kanvas
+        nx1 = Math.max(0, Math.min(canvas.width - 8, nx1));
+        nx2 = Math.max(nx1 + 8, Math.min(canvas.width, nx2));
+        ny1 = Math.max(0, Math.min(canvas.height - 8, ny1));
+        ny2 = Math.max(ny1 + 8, Math.min(canvas.height, ny2));
+
+        const nw = (nx2 - nx1) / canvas.width;
+        const nh = (ny2 - ny1) / canvas.height;
+        b.w = nw;
+        b.h = nh;
+        b.xc = (nx1 + nx2) / (2 * canvas.width);
+        b.yc = (ny1 + ny2) / (2 * canvas.height);
+
+        redrawCanvas();
+      }
+      // Proses Menggeser (Move) BBox
+      else if (isDraggingBBox && activeBBoxIndex !== -1) {
+        const dx = (mx - dragStartX) / canvas.width;
+        const dy = (my - dragStartY) / canvas.height;
+        const b = currentBBoxes[activeBBoxIndex];
+        b.xc = Math.max(b.w/2, Math.min(1 - b.w/2, b.xc + dx));
+        b.yc = Math.max(b.h/2, Math.min(1 - b.h/2, b.yc + dy));
+        dragStartX = mx;
+        dragStartY = my;
+        redrawCanvas();
+      }
+    });
+
+    window.addEventListener('mouseup', async function(e) {
+      if (isDrawing) {
+        isDrawing = false;
+        const x = Math.min(drawStartX, drawCurrentX);
+        const y = Math.min(drawStartY, drawCurrentY);
+        const w = Math.abs(drawCurrentX - drawStartX);
+        const h = Math.abs(drawCurrentY - drawStartY);
+
+        if (w >= 8 && h >= 8) {
+          const newBBox = {
+            id: Math.random().toString(36).substr(2, 6),
+            class_id: activeClassId,
+            xc: (x + w / 2) / canvas.width,
+            yc: (y + h / 2) / canvas.height,
+            w: w / canvas.width,
+            h: h / canvas.height
+          };
+          currentBBoxes.push(newBBox);
+          activeBBoxIndex = currentBBoxes.length - 1;
+          updateActiveBBoxBar();
+          renderBBoxesListUI();
+          await saveCurrentAnnotations();
+        }
+        redrawCanvas();
+      }
+
+      // Selesai Resize BBox
+      if (isResizingBBox && activeBBoxIndex !== -1) {
+        const b = currentBBoxes[activeBBoxIndex];
+        isResizingBBox = false;
+        activeResizeHandle = null;
+        renderBBoxesListUI();
+        await saveCurrentAnnotations();
+
+        if (b.is_crop_layer && b.id) {
+          try {
+            await fetch(`/labeling/${SESSION_ID}/update_crop_layer`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                bg_filename: currentImage.filename,
+                bbox_id: b.id,
+                target_x_pct: b.xc,
+                target_y_pct: b.yc,
+                w: b.w,
+                h: b.h
+              })
+            });
+            currentImageElement.src = `/labeling/${SESSION_ID}/image/${currentImage.filename}?t=${Date.now()}`;
+            currentImageElement.onload = () => redrawCanvas();
+          } catch (err) {
+            console.error("Error updating crop layer on resize:", err);
+          }
+        }
+      }
+
+      // Selesai Drag/Move BBox
+      if (isDraggingBBox && activeBBoxIndex !== -1) {
+        const b = currentBBoxes[activeBBoxIndex];
+        const moved = (Math.abs(b.xc - dragInitialXc) > 0.001 || Math.abs(b.yc - dragInitialYc) > 0.001);
+        if (moved) {
+          if (b.is_crop_layer && b.id) {
+            try {
+              const res = await fetch(`/labeling/${SESSION_ID}/update_crop_layer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  bg_filename: currentImage.filename,
+                  bbox_id: b.id,
+                  target_x_pct: b.xc,
+                  target_y_pct: b.yc,
+                  w: b.w,
+                  h: b.h
+                })
+              });
+              const data = await res.json();
+              if (data.success) {
+                currentImageElement.src = `/labeling/${SESSION_ID}/image/${currentImage.filename}?t=${Date.now()}`;
+                currentImageElement.onload = () => redrawCanvas();
+                showToast("Posisi objek crop berhasil digeser & diperbarui.", "info");
+              }
+            } catch (err) {
+              console.error("Error updating crop layer pos:", err);
+            }
+          }
+          await saveCurrentAnnotations();
+        }
+      }
+      isDraggingBBox = false;
+    });
+
+    // Mouse wheel untuk zoom atau skala crop
+    canvas.addEventListener('wheel', function(e) {
+      if (isPlacingCrop) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.05 : 0.05;
+        placementScale = Math.max(0.2, Math.min(2.5, placementScale + delta));
+        document.getElementById('placement-scale-range').value = placementScale;
+        document.getElementById('placement-scale-text').innerText = `${placementScale.toFixed(2)}x`;
+        redrawCanvas();
+      }
+    });
+  }
+
+  function hitTestBBox(mx, my) {
+    for (let i = currentBBoxes.length - 1; i >= 0; i--) {
+      const b = currentBBoxes[i];
+      const x = (b.xc - b.w / 2) * canvas.width;
+      const y = (b.yc - b.h / 2) * canvas.height;
+      const w = b.w * canvas.width;
+      const h = b.h * canvas.height;
+      if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // ==========================================
+  // 7. COPY-PASTE UKURAN BBOX & EDIT KELAS BBOX
+  // ==========================================
+  function copyActiveBBoxSize() {
+    if (activeBBoxIndex === -1 || !currentBBoxes[activeBBoxIndex]) {
+      showToast("Pilih salah satu bounding box terlebih dahulu untuk menyalin ukurannya.", "warning");
+      return;
+    }
+    const b = currentBBoxes[activeBBoxIndex];
+    copiedBBoxSize = {
+      w: b.w,
+      h: b.h,
+      class_id: b.class_id
+    };
+    showToast(`Ukuran BBox disalin (W: ${(b.w*100).toFixed(1)}%, H: ${(b.h*100).toFixed(1)}%).\nTekan Ctrl+V atau klik 'Paste BBox' untuk menerapkannya.`, "success");
+  }
+
+  async function pasteBBoxSize() {
+    if (!copiedBBoxSize) {
+      showToast("Belum ada ukuran BBox yang disalin. Pilih BBox lalu klik 'Copy Ukuran' (Ctrl+C).", "warning");
+      return;
+    }
+    const newBBox = {
+      id: Math.random().toString(36).substr(2, 6),
+      class_id: activeClassId || copiedBBoxSize.class_id,
+      xc: 0.5,
+      yc: 0.5,
+      w: copiedBBoxSize.w,
+      h: copiedBBoxSize.h
+    };
+    currentBBoxes.push(newBBox);
+    activeBBoxIndex = currentBBoxes.length - 1;
+    updateActiveBBoxBar();
+    renderBBoxesListUI();
+    redrawCanvas();
+    await saveCurrentAnnotations();
+    showToast("BBox berhasil di-paste dengan ukuran yang sama!", "success");
+  }
+
+  async function deleteActiveBBox() {
+    if (activeBBoxIndex !== -1) {
+      const b = currentBBoxes[activeBBoxIndex];
+      // Jika BBox ini adalah crop layer, beri opsi hapus objek crop
+      if (b.is_crop_layer) {
+        await deleteActiveCropLayer();
+        return;
+      }
+      currentBBoxes.splice(activeBBoxIndex, 1);
+      activeBBoxIndex = -1;
+      updateActiveBBoxBar();
+      renderBBoxesListUI();
+      redrawCanvas();
+      await saveCurrentAnnotations();
+    }
+  }
+
+  // Ubah Kelas BBox yang Sudah Ada On-The-Fly
+  async function changeActiveBBoxClass(newClassId) {
+    if (activeBBoxIndex === -1 || !currentBBoxes[activeBBoxIndex]) return;
+    const targetId = parseInt(newClassId);
+    const b = currentBBoxes[activeBBoxIndex];
+    b.class_id = targetId;
+
+    // Jika objek crop, perbarui juga di layer data
+    if (b.is_crop_layer && b.id) {
+      try {
+        await fetch(`/labeling/${SESSION_ID}/update_crop_layer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bg_filename: currentImage.filename,
+            bbox_id: b.id,
+            target_x_pct: b.xc,
+            target_y_pct: b.yc,
+            w: b.w,
+            h: b.h,
+            class_id: targetId
+          })
+        });
+      } catch (err) {
+        console.error("Error updating crop layer class:", err);
+      }
+    }
+
+    await saveCurrentAnnotations();
+    renderClassesUI();
+    renderBBoxesListUI();
+    updateActiveBBoxBar();
+    redrawCanvas();
+
+    const cls = classesList.find(c => c.id === targetId);
+    showToast(`Kelas BBox diubah menjadi '${cls ? cls.name : targetId}'`, 'info');
+  }
+
+  function updateActiveBBoxBar() {
+    const bar = document.getElementById('bbox-action-bar');
+    const classSelect = document.getElementById('active-bbox-class-select');
+    const cropBadge = document.getElementById('active-bbox-crop-badge');
+    const btnDeleteCrop = document.getElementById('btn-delete-crop-layer');
+
+    if (activeBBoxIndex !== -1 && currentBBoxes[activeBBoxIndex]) {
+      bar.style.display = 'flex';
+      const b = currentBBoxes[activeBBoxIndex];
+      const cls = classesList.find(c => c.id === b.class_id) || { name: 'Unknown' };
+
+      document.getElementById('active-bbox-label').innerText = `BBox: ${cls.name}`;
+      document.getElementById('active-bbox-coords').innerText = `W: ${(b.w*100).toFixed(1)}%, H: ${(b.h*100).toFixed(1)}%`;
+
+      // Render pilihan kelas di select dropdown
+      if (classSelect) {
+        classSelect.innerHTML = '';
+        classesList.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.text = c.name;
+          if (c.id === b.class_id) opt.selected = true;
+          classSelect.appendChild(opt);
+        });
+      }
+
+      // Tampilkan tombol & badge layer crop jika BBox berasal dari crop
+      if (b.is_crop_layer) {
+        if (cropBadge) cropBadge.style.display = 'inline-flex';
+        if (btnDeleteCrop) btnDeleteCrop.style.display = 'inline-flex';
+      } else {
+        if (cropBadge) cropBadge.style.display = 'none';
+        if (btnDeleteCrop) btnDeleteCrop.style.display = 'none';
+      }
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  function renderBBoxesListUI() {
+    const list = document.getElementById('current-bboxes-list');
+    list.innerHTML = '';
+    document.getElementById('current-bbox-count-badge').innerText = `${currentBBoxes.length} box`;
+
+    currentBBoxes.forEach((b, idx) => {
+      const cls = classesList.find(c => c.id === b.class_id) || { name: `cls_${b.class_id}`, color: '#38bdf8' };
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.justifyContent = 'space-between';
+      row.style.padding = '5px 8px';
+      row.style.background = idx === activeBBoxIndex ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.025)';
+      row.style.border = '1px solid ' + (idx === activeBBoxIndex ? 'var(--cloud-400)' : 'var(--border-subtle)');
+      row.style.borderRadius = 'var(--radius-sm)';
+      row.style.fontSize = '0.73rem';
+      row.style.cursor = 'pointer';
+
+      row.innerHTML = `
+        <span style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: ${cls.color}; flex-shrink: 0;"></span>
+          <strong style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${b.is_crop_layer ? '[Crop] ' : ''}${cls.name}</strong>
+        </span>
+        <button type="button" class="btn btn-sm btn-danger" style="padding: 1px 6px; font-size: 0.65rem;" onclick="event.stopPropagation(); deleteBBoxByIndex(${idx});">&times;</button>
+      `;
+
+      row.onclick = () => {
+        activeBBoxIndex = idx;
+        updateActiveBBoxBar();
+        renderBBoxesListUI();
+        redrawCanvas();
+      };
+      list.appendChild(row);
+    });
+  }
+
+  async function deleteBBoxByIndex(idx) {
+    if (idx < 0 || idx >= currentBBoxes.length) return;
+    const b = currentBBoxes[idx];
+    if (b.is_crop_layer) {
+      activeBBoxIndex = idx;
+      await deleteActiveCropLayer();
+      return;
+    }
+    currentBBoxes.splice(idx, 1);
+    if (activeBBoxIndex === idx) activeBBoxIndex = -1;
+    updateActiveBBoxBar();
+    renderBBoxesListUI();
+    redrawCanvas();
+    await saveCurrentAnnotations();
+  }
+
+  // ==========================================
+  // 8. CROP LAYER MANAGEMENT & FEATHERING
+  // ==========================================
+  async function cropSelectedObject() {
+    if (activeBBoxIndex === -1 || !currentBBoxes[activeBBoxIndex]) return;
+    const bbox = currentBBoxes[activeBBoxIndex];
+
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/crop_object`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: currentImage.filename,
+          bbox: bbox,
+          blur_radius: 12
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Objek berhasil di-crop dengan Gaussian feathering (tepi blur halus) dan tersimpan di Aset Crop!", "success");
+        await loadCrops();
+        switchRightTab('crops');
+      } else {
+        showToast("Gagal crop objek: " + (data.error || "Unknown error"), "error");
+      }
+    } catch (e) {
+      showToast("Error crop: " + e.message, "error");
+    }
+  }
+
+  // Hapus Objek Crop dan Kembalikan Latar ke Gambar Asli
+  async function deleteActiveCropLayer() {
+    if (activeBBoxIndex === -1 || !currentBBoxes[activeBBoxIndex]) return;
+    const b = currentBBoxes[activeBBoxIndex];
+
+    const confirmed = await showConfirmDialog({
+      title: 'Hapus Objek Crop',
+      message: 'Hapus objek crop ini dari kanvas dan kembalikan gambar latar belakang ke kondisi murni aslinya?',
+      confirmText: 'Ya, Hapus Objek Crop',
+      cancelText: 'Batal',
+      danger: true
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/delete_crop_layer/${currentImage.filename}/${b.id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Objek crop dihapus & latar belakang kembali bersih ke gambar murni.", "success");
+        currentBBoxes.splice(activeBBoxIndex, 1);
+        activeBBoxIndex = -1;
+        updateActiveBBoxBar();
+        renderBBoxesListUI();
+
+        // Muat ulang gambar komposit yang telah bersih
+        currentImageElement.src = `/labeling/${SESSION_ID}/image/${currentImage.filename}?t=${Date.now()}`;
+        currentImageElement.onload = () => redrawCanvas();
+      } else {
+        showToast("Gagal menghapus layer crop: " + (data.error || "Unknown"), "error");
+      }
+    } catch (e) {
+      showToast("Error: " + e.message, "error");
+    }
+  }
+
+  async function loadCrops() {
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/crops`);
+      const data = await res.json();
+      if (data.success && data.crops) {
+        cropsList = data.crops;
+        renderCropsUI();
+      }
+    } catch (e) {
+      console.error("Error load crops:", e);
+    }
+  }
+
+  function renderCropsUI() {
+    const list = document.getElementById('crops-library-list');
+    list.innerHTML = '';
+    document.getElementById('crops-count-badge').innerText = `${cropsList.length} aset`;
+    document.getElementById('tab-crops-badge').innerText = `${cropsList.length}`;
+
+    if (cropsList.length === 0) {
+      list.innerHTML = '<div style="font-size: 0.73rem; color: var(--text-muted); text-align: center; padding: 1.5rem 0.5rem; border: 1px dashed var(--border-subtle); border-radius: var(--radius-sm);">Belum ada objek crop.<br>Buat BBox lalu klik "Crop Objek".</div>';
+      return;
+    }
+
+    cropsList.forEach((c) => {
+      const card = document.createElement('div');
+      card.className = 'crop-card';
+      card.draggable = true;
+      card.ondragstart = (e) => onCropDragStart(e, c.filename, c.url);
+      card.innerHTML = `
+        <img src="${c.url}" style="width: 46px; height: 46px; object-fit: contain; background: repeating-conic-gradient(#1e293b 0% 25%, #0f172a 0% 50%) 50% / 12px 12px; border-radius: 4px; border: 1px solid var(--border-subtle);">
+        <div style="flex: 1; overflow: hidden;">
+          <div style="font-size: 0.74rem; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c.filename}</div>
+          <div style="font-size: 0.67rem; color: var(--cloud-300); margin-bottom: 4px;">${c.width} &times; ${c.height} px</div>
+          <button type="button" class="btn btn-sm btn-primary" onclick="startCropPlacement('${c.filename}', '${c.url}')" style="padding: 2px 8px; font-size: 0.68rem; gap: 4px;">
+            Taruh ke Canvas
+          </button>
+        </div>
+      `;
+      list.appendChild(card);
+    });
+  }
+
+  function switchRightTab(tab) {
+    document.getElementById('tab-classes-btn').className = (tab === 'classes') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    document.getElementById('tab-crops-btn').className = (tab === 'crops') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    document.getElementById('panel-classes').style.display = (tab === 'classes') ? 'flex' : 'none';
+    document.getElementById('panel-crops').style.display = (tab === 'crops') ? 'block' : 'none';
+  }
+
+  // ==========================================
+  // 9. INTERACTIVE DRAG & DROP CROP PLACEMENT
+  // ==========================================
+  function onCropDragStart(e, filename, url) {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ filename, url }));
+  }
+
+  function onCanvasDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onCanvasDrop(e) {
+    e.preventDefault();
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      if (data && data.filename) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        placementPos = {
+          x: Math.max(0.05, Math.min(0.95, mx / canvas.width)),
+          y: Math.max(0.05, Math.min(0.95, my / canvas.height))
+        };
+        startCropPlacement(data.filename, data.url);
+      }
+    } catch (err) {
+      console.error("Drop error:", err);
+    }
+  }
+
+  function startCropPlacement(filename, url) {
+    if (!currentImage) {
+      showToast("Pilih gambar background terlebih dahulu.", "warning");
+      return;
+    }
+
+    isPlacingCrop = true;
+    const img = new Image();
+    img.src = url;
+    placementCropData = {
+      filename: filename,
+      url: url,
+      imgElement: img
+    };
+
+    img.onload = () => {
+      canvas.className = 'mode-placement';
+      document.getElementById('crop-placement-bar').style.display = 'flex';
+      redrawCanvas();
+    };
+  }
+
+  function updatePlacementScale(val) {
+    placementScale = parseFloat(val) || 1.0;
+    document.getElementById('placement-scale-text').innerText = `${placementScale.toFixed(2)}x`;
+    redrawCanvas();
+  }
+
+  function cancelCropPlacement() {
+    isPlacingCrop = false;
+    placementCropData = null;
+    canvas.className = (canvasMode === 'draw') ? '' : 'mode-select';
+    document.getElementById('crop-placement-bar').style.display = 'none';
+    redrawCanvas();
+  }
+
+  async function confirmCropPlacement() {
+    if (!isPlacingCrop || !placementCropData || !currentImage) return;
+
+    const targetClassId = parseInt(document.getElementById('placement-class-select').value) || activeClassId;
+
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/place_crop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bg_filename: currentImage.filename,
+          crop_filename: placementCropData.filename,
+          target_x_pct: placementPos.x,
+          target_y_pct: placementPos.y,
+          scale: placementScale,
+          class_id: targetClassId
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        cancelCropPlacement();
+        currentImageElement.src = `/labeling/${SESSION_ID}/image/${currentImage.filename}?t=${Date.now()}`;
+        currentImageElement.onload = async function() {
+          await loadAnnotationsForCurrent();
+          redrawCanvas();
+        };
+        showToast("Objek crop bertepi halus berhasil ditempatkan! BBox dapat digeser kapan saja di kanvas.", "success");
+      } else {
+        showToast("Gagal menempatkan crop: " + (data.error || "Unknown"), "error");
+      }
+    } catch (e) {
+      showToast("Error menempatkan crop: " + e.message, "error");
+    }
+  }
+
+  // ==========================================
+  // 10. AUTOMATIC LABELING & FEW-SHOT BOOTSTRAP
+  // ==========================================
+  let autoLabelModels = [];
+  let currentModelSource = 'studio';
+
+  async function openAutoLabelModal() {
+    document.getElementById('modal-autolabel').style.display = 'flex';
+    document.getElementById('autolabel-status-indicator').style.display = 'none';
+
+    // Update info badge bootstrap
+    const labeledCount = allImages.filter(i => i.is_labeled).length;
+    const badgeEl = document.getElementById('bootstrap-labeled-badge');
+    if (badgeEl) {
+      badgeEl.innerText = `${labeledCount} / ${allImages.length} Gambar Berlabel`;
+    }
+
+    // Load available studio models
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/available_models`);
+      const data = await res.json();
+      if (data.success && data.models) {
+        autoLabelModels = data.models;
+        const select = document.getElementById('select-studio-model');
+        select.innerHTML = '';
+        if (autoLabelModels.length === 0) {
+          select.innerHTML = '<option value="">(Belum ada model trained di studio - silakan gunakan tab Upload Model)</option>';
+        } else {
+          autoLabelModels.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.run_id;
+            opt.text = m.name;
+            if (m.is_best) opt.selected = true;
+            select.appendChild(opt);
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Error load models:", e);
+    }
+  }
+
+  function closeAutoLabelModal() {
+    document.getElementById('modal-autolabel').style.display = 'none';
+  }
+
+  function switchModelSource(src) {
+    currentModelSource = src;
+    document.getElementById('tab-model-studio').className = (src === 'studio') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    document.getElementById('tab-model-upload').className = (src === 'upload') ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+
+    document.getElementById('box-source-studio').style.display = (src === 'studio') ? 'block' : 'none';
+    document.getElementById('box-source-upload').style.display = (src === 'upload') ? 'block' : 'none';
+    document.getElementById('box-standard-infer-settings').style.display = 'block';
+
+    const runBtn = document.getElementById('btn-run-autolabel');
+    runBtn.innerText = 'Mulai Auto-Labeling';
+    runBtn.style.background = 'linear-gradient(180deg, #a855f7 0%, #7e22ce 100%)';
+    runBtn.style.borderColor = '#a855f7';
+  }
+
+  function handleModelFileChange(input) {
+    const label = document.getElementById('model-filename-label');
+    if (input.files && input.files[0]) {
+      label.innerText = `✓ ${input.files[0].name} (${(input.files[0].size / (1024*1024)).toFixed(1)} MB)`;
+    } else {
+      label.innerText = 'Belum ada file dipilih';
+    }
+  }
+
+  function onAutoLabelSubmitClick() {
+    submitAutoLabel();
+  }
+
+  async function submitAutoLabel() {
+    const conf = (parseInt(document.getElementById('slider-conf').value) || 35) / 100.0;
+    const targetMode = document.querySelector('input[name="auto_target_mode"]:checked').value;
+    const overwrite = document.getElementById('check-auto-overwrite').checked;
+
+    const formData = new FormData();
+    formData.append('conf_threshold', conf);
+    formData.append('target_mode', targetMode);
+    formData.append('current_filename', currentImage ? currentImage.filename : '');
+    formData.append('overwrite', overwrite ? 'true' : 'false');
+
+    if (currentModelSource === 'upload') {
+      const fileInput = document.getElementById('input-model-file');
+      if (!fileInput.files || !fileInput.files[0]) {
+        showToast("Pilih berkas model .pt terlebih dahulu.", "warning");
+        return;
+      }
+      formData.append('model_file', fileInput.files[0]);
+    } else {
+      const runId = document.getElementById('select-studio-model').value;
+      if (!runId) {
+        showToast("Pilih model hasil training dari daftar studio atau gunakan tab Upload / Bootstrap.", "warning");
+        return;
+      }
+      formData.append('model_run_id', runId);
+    }
+
+    const btn = document.getElementById('btn-run-autolabel');
+    const statusBox = document.getElementById('autolabel-status-indicator');
+    const statusText = document.getElementById('autolabel-status-text');
+    btn.disabled = true;
+    statusBox.style.display = 'flex';
+    statusText.innerText = "Menjalankan inferensi model YOLO...";
+
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/auto_label`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        closeAutoLabelModal();
+        showToast(`Automatic Labeling selesai!\nDiproses: ${data.data.processed_count} gambar\nTotal Deteksi Objek: ${data.data.total_detections} BBox`, "success");
+
+        await loadClasses();
+        await loadImages();
+        await loadAnnotationsForCurrent();
+        redrawCanvas();
+      } else {
+        showToast("Gagal auto-labeling: " + (data.error || "Unknown error"), "error");
+      }
+    } catch (e) {
+      showToast("Error auto-labeling: " + e.message, "error");
+    } finally {
+      btn.disabled = false;
+      statusBox.style.display = 'none';
+    }
+  }
+
+
+  // ==========================================
+  // 11. SPLIT DATASET & GENERATE DATA.YAML
+  // ==========================================
+  function openSplitModal() {
+    if (!allImages || allImages.length === 0) {
+      showToast("Tidak ada gambar dalam sesi pelabelan ini.", "warning");
+      return;
+    }
+    const labeledCount = allImages.filter(i => i.is_labeled).length;
+    const bgCount = allImages.length - labeledCount;
+
+    const elTotal = document.getElementById('split-total-count');
+    const elLabeled = document.getElementById('split-labeled-count');
+    const elBg = document.getElementById('split-bg-count');
+    if (elTotal) elTotal.innerText = `${allImages.length} file`;
+    if (elLabeled) elLabeled.innerText = `${labeledCount} file`;
+    if (elBg) elBg.innerText = `${bgCount} file`;
+
+    document.getElementById('modal-split').style.display = 'flex';
+  }
+
+  function closeSplitModal() {
+    document.getElementById('modal-split').style.display = 'none';
+  }
+
+  function setSplitPreset(t, v, te) {
+    document.getElementById('slider-train').value = t;
+    document.getElementById('slider-val').value = v;
+    document.getElementById('slider-test').value = te;
+    document.getElementById('val-train-pct').innerText = `${t}%`;
+    document.getElementById('val-val-pct').innerText = `${v}%`;
+    document.getElementById('val-test-pct').innerText = `${te}%`;
+  }
+
+  function updateSplitSliders(changed) {
+    const sTrain = document.getElementById('slider-train');
+    const sVal = document.getElementById('slider-val');
+    const sTest = document.getElementById('slider-test');
+
+    let train = parseInt(sTrain.value) || 0;
+    let val = parseInt(sVal.value) || 0;
+    let test = parseInt(sTest.value) || 0;
+
+    if (changed === 'train') {
+      const remain = 100 - train;
+      if (test === 0) {
+        // Jika test sudah 0, sisa langsung dialokasikan ke val
+        val = remain;
+        test = 0;
+      } else if (val === 0) {
+        test = remain;
+        val = 0;
+      } else {
+        const otherTotal = val + test;
+        val = Math.round(remain * (val / otherTotal));
+        test = remain - val;
+        if (test < 0) {
+          test = 0;
+          val = remain;
+        }
+      }
+      sVal.value = val;
+      sTest.value = test;
+    } else if (changed === 'val') {
+      const remain = 100 - val;
+      if (test === 0) {
+        // Jika test sudah 0, sisa langsung dialokasikan ke train
+        train = remain;
+        test = 0;
+      } else if (train === 0) {
+        test = remain;
+        train = 0;
+      } else {
+        const otherTotal = train + test;
+        train = Math.round(remain * (train / otherTotal));
+        test = remain - train;
+        if (test < 0) {
+          test = 0;
+          train = remain;
+        }
+      }
+      sTrain.value = train;
+      sTest.value = test;
+    } else if (changed === 'test') {
+      const remain = 100 - test;
+      const otherTotal = train + val;
+      if (otherTotal === 0) {
+        train = Math.round(remain * 0.8);
+        val = remain - train;
+      } else {
+        train = Math.round(remain * (train / otherTotal));
+        val = remain - train;
+        if (val < 0) {
+          val = 0;
+          train = remain;
+        }
+      }
+      sTrain.value = train;
+      sVal.value = val;
+    }
+
+    document.getElementById('val-train-pct').innerText = `${sTrain.value}%`;
+    document.getElementById('val-val-pct').innerText = `${sVal.value}%`;
+    document.getElementById('val-test-pct').innerText = `${sTest.value}%`;
+  }
+
+  async function submitSplitDataset(mode = 'save') {
+    const sTrain = parseInt(document.getElementById('slider-train').value);
+    const sVal = parseInt(document.getElementById('slider-val').value);
+    const sTest = parseInt(document.getElementById('slider-test').value);
+    const dsName = document.getElementById('export-dataset-name').value.trim();
+
+    const btnSave = document.getElementById('btn-do-split');
+    const btnAug = document.getElementById('btn-do-split-aug');
+    if (btnSave) btnSave.disabled = true;
+    if (btnAug) btnAug.disabled = true;
+
+    if (mode === 'augment') {
+      if (btnAug) btnAug.innerText = 'Menyiapkan Augmentasi...';
+    } else {
+      if (btnSave) btnSave.innerText = 'Menyimpan Dataset...';
+    }
+
+    try {
+      const res = await fetch(`/labeling/${SESSION_ID}/export_split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          train_pct: sTrain,
+          val_pct: sVal,
+          test_pct: sTest,
+          dataset_name: dsName,
+          register_to_studio: true
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        closeSplitModal();
+
+        if (mode === 'augment') {
+          showToast("Dataset siap! Mengalihkan ke Studio Augmentasi...", "info");
+          setTimeout(() => {
+            window.location.href = `/augmentation?dataset_id=${data.data.dataset_id}&from_split=1&replace_source=1`;
+          }, 350);
+          return;
+        }
+
+        // Mode 'save' biasa
+        if (data.data.download_url) {
+          const dlLink = document.createElement('a');
+          dlLink.href = data.data.download_url;
+          dlLink.download = data.data.zip_filename || `${data.data.dataset_name}.zip`;
+          document.body.appendChild(dlLink);
+          dlLink.click();
+          document.body.removeChild(dlLink);
+          showToast(`File ZIP '${data.data.zip_filename || data.data.dataset_name + '.zip'}' sedang diunduh...`, "info");
+        }
+
+        const totalImg = data.data.total_images || (data.data.train_count + data.data.val_count + data.data.test_count);
+        const lCount = data.data.labeled_count !== undefined ? data.data.labeled_count : '-';
+        const bCount = data.data.bg_count !== undefined ? data.data.bg_count : '-';
+
+        const conf = await showConfirmDialog({
+          title: 'Split Dataset & Ekspor ZIP Berhasil!',
+          message: `Dataset '${data.data.dataset_name}' berhasil diekspor!\n\n• Total Gambar: ${totalImg} (${lCount} berlabel, ${bCount} background)\n• Train: ${data.data.train_count} gambar\n• Val: ${data.data.val_count} gambar\n• Test: ${data.data.test_count} gambar\n\nFile ZIP sudah diunduh secara otomatis dan dataset ini sudah langsung terdaftar di menu Datasets Studio.\n\nApakah Anda ingin membuka menu Datasets sekarang?`,
+          confirmText: 'Buka Menu Datasets',
+          cancelText: 'Lanjut New Training'
+        });
+        if (conf) {
+          window.location.href = '/datasets';
+        } else {
+          window.location.href = `/training/new?dataset_id=${data.data.dataset_id}`;
+        }
+      } else {
+        showToast("Gagal split dataset: " + (data.error || "Unknown"), "error");
+      }
+    } catch (e) {
+      showToast("Error: " + e.message, "error");
+    } finally {
+      if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.innerText = 'Simpan Dataset Saja';
+      }
+      if (btnAug) {
+        btnAug.disabled = false;
+        btnAug.innerText = 'Langsung Augmentasi';
+      }
+    }
+  }
+
+  // ==========================================
+  // 12. KEYBOARD SHORTCUTS
+  // ==========================================
+  function setupKeyboardShortcuts() {
+    window.addEventListener('keydown', function(e) {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+      if (isPlacingCrop) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          confirmCropPlacement();
+          return;
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelCropPlacement();
+          return;
+        }
+      }
+
+      // Copy BBox Size: Ctrl + C
+      if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        copyActiveBBoxSize();
+      }
+      // Paste BBox Size: Ctrl + V
+      else if (e.ctrlKey && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        pasteBBoxSize();
+      }
+      // Delete BBox: Delete or Backspace
+      else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteActiveBBox();
+      }
+      // Navigasi Gambar: A / Panah Kiri (Prev), D / Panah Kanan (Next)
+      else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        navImage(-1);
+      }
+      else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        navImage(1);
+      }
+      // Pilihan Kelas Cepat: Angka 1-9
+      else if (e.key >= '1' && e.key <= '9') {
+        const idx = parseInt(e.key) - 1;
+        if (idx < classesList.length) {
+          activeClassId = classesList[idx].id;
+          renderClassesUI();
+          if (activeBBoxIndex !== -1 && currentBBoxes[activeBBoxIndex]) {
+            changeActiveBBoxClass(activeClassId);
+          }
+        }
+      }
+    });
+  }
+</script>
+{% endblock %}

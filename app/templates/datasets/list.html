@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Datasets | YOLO Training Studio{% endblock %}
+{% block header_title %}Dataset Management{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+  <div>
+    <h1 class="page-hero-title">Koleksi Dataset YOLO</h1>
+    <p class="page-hero-sub">Daftar dataset yang telah diunggah dan diekstrak untuk pelatihan model.</p>
+  </div>
+  <a href="{{ url_for('datasets.upload_page') }}" class="btn btn-primary">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+    Upload Dataset ZIP
+  </a>
+</div>
+
+
+<div class="card">
+  <div class="table-container">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nama Dataset</th>
+          <th>Project</th>
+          <th>Class</th>
+          <th>Train Images</th>
+          <th>Val Images</th>
+          <th>Test Images</th>
+          <th>File Asli / ZIP</th>
+          <th>Diunggah Pada</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if datasets %}
+          {% for ds in datasets %}
+          <tr>
+            <td>
+              <a href="{{ url_for('datasets.detail', dataset_id=ds.id) }}" style="font-weight: 600;">
+                {{ ds.name }}
+              </a>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">{{ ds.id }}</div>
+            </td>
+            <td>
+              <span class="badge" style="background: rgba(56, 189, 248, 0.1); color: var(--cloud-300); border: 1px solid var(--accent-border);">
+                {{ ds.project.name if ds.project else 'Tanpa Project' }}
+              </span>
+            </td>
+            <td>
+              <span class="badge badge-neutral">{{ ds.num_classes }} Class</span>
+            </td>
+            <td><strong>{{ ds.train_count }}</strong> img</td>
+            <td><strong>{{ ds.val_count }}</strong> img</td>
+            <td>{{ ds.test_count if ds.test_count else '-' }}</td>
+            <td style="color: var(--text-secondary); font-size: 0.8rem;">
+              <span style="display: flex; align-items: center; gap: 4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--cloud-400);">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                {{ ds.upload_filename }}
+              </span>
+            </td>
+            <td style="color: var(--text-muted); font-size: 0.8rem;">{{ ds.created_at.strftime('%Y-%m-%d %H:%M') if ds.created_at else '-' }}</td>
+            <td>
+              <div style="display: flex; gap: 0.4rem; align-items: center;">
+                <a href="{{ url_for('datasets.detail', dataset_id=ds.id) }}" class="btn btn-secondary btn-sm" title="Detail & Validasi">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  Detail
+                </a>
+                <a href="{{ url_for('datasets.download_dataset', dataset_id=ds.id) }}" class="btn btn-secondary btn-sm" title="Unduh File ZIP Dataset">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #38bdf8;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  ZIP
+                </a>
+                <a href="{{ url_for('training.new_training', dataset_id=ds.id) }}" class="btn btn-primary btn-sm" title="Train Model dengan Dataset Ini">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polygon points="10 8 16 12 10 16 10 8"/>
+                  </svg>
+                  Train
+                </a>
+                <form action="{{ url_for('datasets.delete_dataset', dataset_id=ds.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Hapus dataset \'{{ ds.name }}\' beserta seluruh filenya?');">
+                  <button type="submit" class="btn btn-danger btn-sm" title="Hapus Dataset">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
+              Belum ada dataset yang diunggah. Klik <strong>Upload Dataset ZIP</strong> untuk menambahkan dataset pertama Anda.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

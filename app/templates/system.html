@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}System & Hardware | YOLO Training Studio{% endblock %}
+{% block header_title %}System Environment & Hardware Diagnostics{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1.5rem;">
+  <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff;">Hardware & Environment Diagnostics</h2>
+  <p style="color: var(--text-secondary); font-size: 0.85rem;">Informasi detail pustaka PyTorch, CUDA, driver GPU, serta kapasitas komputasi lokal.</p>
+</div>
+
+<!-- Hardware Cards -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+  
+  <!-- GPU Card (PRD Section 32 & 69) -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">NVIDIA GPU Acceleration</div>
+      <span class="badge {{ 'badge-success' if env.gpu.available else 'badge-danger' }}">
+        {{ 'CUDA Active' if env.gpu.available else 'No CUDA' }}
+      </span>
+    </div>
+    <div class="card-body">
+      <table class="table" style="font-size: 0.85rem;">
+        <tr>
+          <td style="color: var(--text-secondary); width: 40%;">Device Name</td>
+          <td><strong>{{ env.gpu.device_name }}</strong></td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-secondary);">GPU Utilization</td>
+          <td><strong id="live-gpu-util">{{ env.gpu.utilization_gpu }}%</strong></td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-secondary);">VRAM Terpakai</td>
+          <td id="live-vram">{{ env.gpu.vram_used_mb }} MB / {{ env.gpu.vram_total_mb }} MB ({{ env.gpu.vram_pct }}%)</td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-secondary);">VRAM Bebas</td>
+          <td id="live-vram-free" style="color: #34d399; font-weight: 600;">{{ env.gpu.vram_free_mb }} MB</td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-secondary);">Suhu GPU</td>
+          <td id="live-temp">{{ env.gpu.temperature }} °C</td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-secondary);">Power Draw</td>
+          <td id="live-power">{{ env.gpu.power_draw_w }}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- CPU & RAM Card (PRD Section 34 & 69) -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">Host CPU & RAM Resources</div>
+    </div>
+    <div class="card-body">
+      <table class="table" style="font-size: 0.85rem;">
+        <tr>
+          <td style="color: var(--text-secondary); width: 40%;">CPU Cores</td>
+          <td><strong>{{ env.resources.cpu_count }} Logical Cores</strong></td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-secondary);">CPU Utilization</td>
+          <td id="live-cpu">{{ env.resources.cpu_pct }}%</td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-secondary);">RAM Terpakai</td>
+          <td id="live-ram">{{ env.resources.ram_used_gb }} GB / {{ env.resources.ram_total_gb }} GB</td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-secondary);">RAM Percentage</td>
+          <td id="live-ram-pct">{{ env.resources.ram_pct }}%</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Software & Framework Environment (PRD Section 69) -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Deep Learning Framework & Python Environment</div>
+  </div>
+  <div class="card-body">
+    <table class="table" style="font-size: 0.85rem;">
+      <tr>
+        <td style="color: var(--text-secondary); width: 25%;">Python Version</td>
+        <td><code>{{ env.python_version }}</code></td>
+      </tr>
+      <tr>
+        <td style="color: var(--text-secondary);">PyTorch Version</td>
+        <td><code>{{ env.pytorch_version }}</code></td>
+      </tr>
+      <tr>
+        <td style="color: var(--text-secondary);">CUDA Runtime</td>
+        <td><code>{{ env.cuda_version }}</code> (cuDNN: <code>{{ env.cudnn_version }}</code>)</td>
+      </tr>
+      <tr>
+        <td style="color: var(--text-secondary);">Ultralytics Version</td>
+        <td><code>{{ env.ultralytics_version }}</code></td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<script>
+  function pollLiveDiagnostics() {
+    fetch('/system/api/gpu')
+      .then(r => r.json())
+      .then(d => {
+        if (!d) return;
+        document.getElementById('live-gpu-util').innerText = d.utilization_gpu + '%';
+        document.getElementById('live-vram').innerText = `${d.vram_used_mb} MB / ${d.vram_total_mb} MB (${d.vram_pct}%)`;
+        document.getElementById('live-vram-free').innerText = d.vram_free_mb + ' MB';
+        document.getElementById('live-temp').innerText = d.temperature + ' °C';
+        document.getElementById('live-power').innerText = d.power_draw_w;
+      }).catch(() => {});
+
+    fetch('/system/api/resources')
+      .then(r => r.json())
+      .then(res => {
+        if (!res) return;
+        document.getElementById('live-cpu').innerText = res.cpu_pct + '%';
+        document.getElementById('live-ram').innerText = `${res.ram_used_gb} GB / ${res.ram_total_gb} GB`;
+        document.getElementById('live-ram-pct').innerText = res.ram_pct + '%';
+      }).catch(() => {});
+  }
+
+  setInterval(pollLiveDiagnostics, 2000);
+</script>
+{% endblock %}

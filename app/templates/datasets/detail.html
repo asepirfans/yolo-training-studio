@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dataset.name }} | Detail Dataset{% endblock %}
+{% block header_title %}Dataset: {{ dataset.name }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff;">{{ dataset.name }}</h2>
+      <span class="badge badge-neutral">{{ dataset.id }}</span>
+      {% if validation %}
+        {% if validation.status == 'Valid' %}
+          <span class="badge badge-success">Valid</span>
+        {% elif validation.status == 'Warning' %}
+          <span class="badge badge-warning">Warning</span>
+        {% else %}
+          <span class="badge badge-danger">Invalid</span>
+        {% endif %}
+      {% endif %}
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px;">
+      YAML: <code>{{ dataset.yaml_path or 'Tidak ditemukan' }}</code>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <a href="{{ url_for('datasets.download_dataset', dataset_id=dataset.id) }}" class="btn btn-secondary" title="Unduh Arsip ZIP Dataset Standar YOLO">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #38bdf8;">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Unduh ZIP Dataset
+    </a>
+    <a href="{{ url_for('training.new_training', dataset_id=dataset.id) }}" class="btn btn-primary">
+      Gunakan untuk Training
+    </a>
+    <form action="{{ url_for('datasets.delete_dataset', dataset_id=dataset.id) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus dataset ini beserta file fisiknya?');">
+      <button type="submit" class="btn btn-danger btn-sm" style="padding: 0.5rem 0.75rem;">Hapus</button>
+    </form>
+  </div>
+</div>
+
+<!-- Dataset Metric Stats (PRD Section 10 & 11) -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-label">Train Images</div>
+    <div class="metric-value">{{ dataset.train_count }}</div>
+    <div class="metric-sub">Folder subset pelatihan</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Val Images</div>
+    <div class="metric-value">{{ dataset.val_count }}</div>
+    <div class="metric-sub">Folder subset validasi</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Test Images</div>
+    <div class="metric-value">{{ dataset.test_count }}</div>
+    <div class="metric-sub">Folder subset pengujian</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-label">Jumlah Class</div>
+    <div class="metric-value">{{ dataset.num_classes }}</div>
+    <div class="metric-sub">Terdaftar di data.yaml</div>
+  </div>
+</div>
+
+<!-- Classes & Validation Summary -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+  
+  <!-- Class Names Card -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">Daftar Class Terdaftar</div>
+    </div>
+    <div class="card-body">
+      {% set classes = dataset.get_class_names() %}
+      {% if classes %}
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+          {% for cid, cname in classes.items() %}
+            <div style="background: #27272a; padding: 4px 10px; border-radius: 4px; font-size: 0.85rem; border: 1px solid #3f3f46;">
+              <span style="color: var(--accent-primary); font-weight: 700;">#{{ cid }}</span>
+              <span style="color: #fff; margin-left: 4px;">{{ cname }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="color: var(--text-muted);">Tidak ada kelas yang terdeteksi di data.yaml.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Validation Report Card (PRD Section 11) -->
+  <div class="card" style="margin-bottom: 0;">
+    <div class="card-header">
+      <div class="card-title">Laporan Validasi Dataset</div>
+      <button onclick="revalidate()" id="reval-btn" class="btn btn-secondary btn-sm">Cek Ulang</button>
+    </div>
+    <div class="card-body">
+      {% if validation %}
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-secondary);">Invalid Labels (out of bounds):</span>
+            <strong style="color: {{ '#f87171' if validation.invalid_labels > 0 else '#34d399' }}">{{ validation.invalid_labels }}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-secondary);">Missing Label Files:</span>
+            <strong style="color: {{ '#fbbf24' if validation.missing_labels > 0 else '#34d399' }}">{{ validation.missing_labels }}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-secondary);">Corrupt Images:</span>
+            <strong style="color: {{ '#f87171' if validation.corrupt_images > 0 else '#34d399' }}">{{ validation.corrupt_images }}</strong>
+          </div>
+        </div>
+        {% if validation.errors %}
+          <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 4px; font-size: 0.8rem; color: #f87171;">
+            {% for err in validation.errors %}<div>• {{ err }}</div>{% endfor %}
+          </div>
+        {% endif %}
+      {% else %}
+        <p style="color: var(--text-muted);">Validasi belum dijalankan.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Dataset Preview Gallery (PRD Section 12) -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Sample Image Preview (12 Gambar)</div>
+    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; color: var(--text-secondary);">
+      <input type="checkbox" id="toggle-boxes" checked onchange="toggleBoundingBoxes()">
+      <span>Tampilkan Bounding Box</span>
+    </label>
+  </div>
+  <div class="card-body">
+    <div id="preview-grid" class="gallery-grid">
+      <div style="color: var(--text-muted); padding: 1rem;">Memuat sampel gambar...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Detail Preview Image (Inspection Modal) -->
+<div id="sample-modal" class="modal-overlay" style="display: none; z-index: 1000;" onclick="closeSampleModal()">
+  <div class="card" style="max-width: 900px; width: 94%; max-height: 92vh; margin: auto; background: #0c121e; border: 1px solid var(--border-card); box-shadow: 0 24px 60px rgba(0,0,0,0.85); display: flex; flex-direction: column; overflow: hidden;" onclick="event.stopPropagation()">
+    <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <div id="modal-sample-title" class="card-title" style="font-size: 0.95rem; color: #fff;">Detail Sampel</div>
+        <div id="modal-sample-meta" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">Resolusi: -</div>
+      </div>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="closeSampleModal()">&times;</button>
+    </div>
+    <div class="card-body" style="padding: 1rem; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #030712; overflow: auto;">
+      <canvas id="modal-canvas" style="max-width: 100%; max-height: 65vh; width: auto; height: auto; display: block; border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.7);"></canvas>
+    </div>
+    <div style="padding: 0.75rem 1.25rem; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02);">
+      <div id="modal-sample-boxes" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="closeSampleModal()">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let cachedSamples = [];
+  let modalCurrentSample = null;
+
+  const PALETTE = [
+    '#38bdf8', '#34d399', '#f43f5e', '#fbbf24', '#a855f7',
+    '#fb923c', '#4ade80', '#818cf8', '#f472b6', '#2dd4bf'
+  ];
+
+  function getClassColor(id) {
+    return PALETTE[Math.abs(id || 0) % PALETTE.length];
+  }
+
+  function loadPreview() {
+    fetch('{{ url_for("datasets.preview_samples", dataset_id=dataset.id) }}')
+      .then(res => res.json())
+      .then(data => {
+        const grid = document.getElementById('preview-grid');
+        grid.innerHTML = '';
+        if (data.success && data.samples.length > 0) {
+          cachedSamples = data.samples;
+          renderSamples();
+        } else {
+          grid.innerHTML = '<div style="color: var(--text-muted);">Tidak ada sampel gambar yang dapat ditampilkan.</div>';
+        }
+      })
+      .catch(() => {
+        document.getElementById('preview-grid').innerHTML = '<div style="color: #f87171;">Gagal memuat sampel.</div>';
+      });
+  }
+
+  function renderSamples() {
+    const grid = document.getElementById('preview-grid');
+    grid.innerHTML = '';
+    const showBoxes = document.getElementById('toggle-boxes').checked;
+
+    cachedSamples.forEach((sample, idx) => {
+      const card = document.createElement('div');
+      card.className = 'gallery-card';
+      card.style.position = 'relative';
+      card.style.cursor = 'pointer';
+      card.title = 'Klik untuk memperbesar gambar & memeriksa bounding box';
+
+      // Container gambar dengan canvas presisi
+      const container = document.createElement('div');
+      container.style.position = 'relative';
+      container.style.width = '100%';
+      container.style.height = '210px';
+      container.style.backgroundColor = '#04060a';
+      container.style.display = 'flex';
+      container.style.alignItems = 'center';
+      container.style.justifyContent = 'center';
+      container.style.overflow = 'hidden';
+
+      const canvas = document.createElement('canvas');
+      canvas.style.maxWidth = '100%';
+      canvas.style.maxHeight = '210px';
+      canvas.style.width = 'auto';
+      canvas.style.height = 'auto';
+      canvas.style.display = 'block';
+      canvas.style.objectFit = 'contain';
+      container.appendChild(canvas);
+      card._canvas = canvas;
+
+      // Loading state
+      const loadingSpinner = document.createElement('div');
+      loadingSpinner.style.position = 'absolute';
+      loadingSpinner.style.fontSize = '0.75rem';
+      loadingSpinner.style.color = 'var(--text-muted)';
+      loadingSpinner.innerText = 'Memuat...';
+      container.appendChild(loadingSpinner);
+
+      if (sample._img) {
+        loadingSpinner.style.display = 'none';
+        drawSampleCanvas(canvas, sample, showBoxes);
+      } else {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          sample._img = img;
+          loadingSpinner.style.display = 'none';
+          drawSampleCanvas(canvas, sample, showBoxes);
+        };
+        img.onerror = () => {
+          loadingSpinner.innerText = 'Gagal memuat gambar';
+          loadingSpinner.style.color = '#f87171';
+        };
+        img.src = sample.image_url;
+      }
+
+      card.appendChild(container);
+
+      // Card Footer
+      const footer = document.createElement('div');
+      footer.className = 'gallery-footer';
+      footer.style.display = 'flex';
+      footer.style.justifyContent = 'space-between';
+      footer.style.alignItems = 'center';
+
+      const fname = document.createElement('span');
+      fname.style.overflow = 'hidden';
+      fname.style.textOverflow = 'ellipsis';
+      fname.style.whiteSpace = 'nowrap';
+      fname.style.maxWidth = '180px';
+      fname.innerText = sample.filename;
+      footer.appendChild(fname);
+
+      const countBadge = document.createElement('span');
+      countBadge.className = 'badge badge-neutral';
+      countBadge.style.fontSize = '0.68rem';
+      countBadge.innerText = `${sample.boxes ? sample.boxes.length : 0} box`;
+      footer.appendChild(countBadge);
+
+      card.appendChild(footer);
+
+      // Click to open inspection modal
+      card.onclick = () => {
+        openSampleModal(sample);
+      };
+
+      grid.appendChild(card);
+    });
+  }
+
+  function drawSampleCanvas(canvas, sample, showBoxes) {
+    const img = sample._img;
+    if (!img || !img.naturalWidth) return;
+
+    // Set resolusi canvas sama persis dengan dimensi alami gambar asli
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    if (showBoxes && sample.boxes && sample.boxes.length > 0) {
+      const scaleFactor = Math.max(1, canvas.width / 900);
+      const strokeW = Math.max(2, Math.round(2.5 * scaleFactor));
+      const fontPx = Math.max(12, Math.round(14 * scaleFactor));
+
+      sample.boxes.forEach(b => {
+        const color = getClassColor(b.class_id);
+        // Koordinat YOLO (cx, cy, w, h) ternormalisasi 0..1 ke dimensi asli gambar
+        const x = (b.cx - b.w / 2) * canvas.width;
+        const y = (b.cy - b.h / 2) * canvas.height;
+        const w = b.w * canvas.width;
+        const h = b.h * canvas.height;
+
+        // Isian semi transparan
+        ctx.fillStyle = color + '26'; // ~15% opacity
+        ctx.fillRect(x, y, w, h);
+
+        // Garis batas bounding box
+        ctx.strokeStyle = color;
+        ctx.lineWidth = strokeW;
+        ctx.strokeRect(x, y, w, h);
+
+        // Label kelas
+        const label = b.class_name ? `${b.class_name}` : `Class ${b.class_id}`;
+        ctx.font = `600 ${fontPx}px Poppins, sans-serif`;
+        const textMetrics = ctx.measureText(label);
+        const padX = 6 * scaleFactor;
+        const tagH = fontPx + 8 * scaleFactor;
+        const tagW = textMetrics.width + padX * 2;
+        const tagY = Math.max(0, y - tagH);
+
+        ctx.fillStyle = color;
+        ctx.fillRect(x, tagY, tagW, tagH);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, x + padX, tagY + tagH - 4 * scaleFactor);
+      });
+    }
+  }
+
+  function toggleBoundingBoxes() {
+    const showBoxes = document.getElementById('toggle-boxes').checked;
+    const grid = document.getElementById('preview-grid');
+    const cards = grid.getElementsByClassName('gallery-card');
+
+    cachedSamples.forEach((sample, idx) => {
+      if (cards[idx] && cards[idx]._canvas && sample._img) {
+        drawSampleCanvas(cards[idx]._canvas, sample, showBoxes);
+      }
+    });
+
+    if (modalCurrentSample) {
+      const modalCanvas = document.getElementById('modal-canvas');
+      drawSampleCanvas(modalCanvas, modalCurrentSample, showBoxes);
+    }
+  }
+
+  function openSampleModal(sample) {
+    modalCurrentSample = sample;
+    const modal = document.getElementById('sample-modal');
+    const title = document.getElementById('modal-sample-title');
+    const meta = document.getElementById('modal-sample-meta');
+    const boxesContainer = document.getElementById('modal-sample-boxes');
+    const modalCanvas = document.getElementById('modal-canvas');
+
+    title.innerText = sample.filename;
+    meta.innerText = sample._img ? `Resolusi Asli: ${sample._img.naturalWidth} × ${sample._img.naturalHeight} px | Jumlah BBox: ${sample.boxes ? sample.boxes.length : 0}` : '';
+
+    // Render badge kelas
+    boxesContainer.innerHTML = '';
+    if (sample.boxes && sample.boxes.length > 0) {
+      const classMap = {};
+      sample.boxes.forEach(b => {
+        const key = b.class_name || `Class ${b.class_id}`;
+        classMap[key] = (classMap[key] || 0) + 1;
+      });
+      for (const [cname, count] of Object.entries(classMap)) {
+        const badge = document.createElement('span');
+        badge.style.padding = '3px 8px';
+        badge.style.borderRadius = '4px';
+        badge.style.fontSize = '0.74rem';
+        badge.style.background = 'rgba(56, 189, 248, 0.15)';
+        badge.style.border = '1px solid rgba(56, 189, 248, 0.4)';
+        badge.style.color = '#38bdf8';
+        badge.innerText = `${cname}: ${count}`;
+        boxesContainer.appendChild(badge);
+      }
+    } else {
+      boxesContainer.innerHTML = '<span style="font-size: 0.74rem; color: var(--text-muted);">Tidak ada bounding box pada gambar ini.</span>';
+    }
+
+    const showBoxes = document.getElementById('toggle-boxes').checked;
+    drawSampleCanvas(modalCanvas, sample, showBoxes);
+
+    modal.style.display = 'flex';
+  }
+
+  function closeSampleModal() {
+    const modal = document.getElementById('sample-modal');
+    modal.style.display = 'none';
+    modalCurrentSample = null;
+  }
+
+  function revalidate() {
+    const btn = document.getElementById('reval-btn');
+    btn.disabled = true;
+    btn.innerText = 'Memeriksa...';
+    fetch('{{ url_for("datasets.validate_dataset", dataset_id=dataset.id) }}', { method: 'POST' })
+      .then(r => r.json())
+      .then(res => {
+        window.location.reload();
+      })
+      .catch(() => {
+        alert('Gagal memvalidasi dataset');
+        btn.disabled = false;
+        btn.innerText = 'Cek Ulang';
+      });
+  }
+
+  loadPreview();
+</script>
+{% endblock %}
